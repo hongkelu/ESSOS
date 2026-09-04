@@ -105,6 +105,23 @@ sequential model: Cyna still owns global first-wall selection, branch identity,
 connection length, and the refreshed plane after every accepted outer step.
 The JAX loss never searches for a new hit or silently changes labels.
 
+For heat loading, `ManifoldHeatStage2Target` extends the same frozen-label
+contract to an ordered bundle of strikes.  PyNA supplies the exact
+`(branch, direction, seed order)` labels and quantitative powers with explicit
+provenance.  Its JAX backend solves the moving periodic X-line once and traces
+all labelled local wall events; ESSOS then deposits those fixed powers onto a
+fixed set of wall monitor cells with an area-normalized Gaussian kernel.  The
+discrete inner model conserves power exactly,
+`sum(heat_flux * cell_area) == sum(strike_power)`, and provides an
+area-weighted squared-hinge penalty above a physical heat-flux limit.
+
+This Gaussian footprint is a differentiable sequential approximation based on
+local Cartesian chord distance.  It must not be interpreted as the production
+heat map.  After a candidate coil step, PyNA/Cyna must retrace global first
+hits, connection lengths, unresolved power, and wall deposition on the full
+wall mesh; the fixed labels, powers, tangent planes, and monitor-cell model are
+refreshed only after that outer calculation accepts the candidate.
+
 `validate_manifold_strike_candidate` performs that outer strike transaction
 after the candidate manifold branch has passed its production refresh.  It
 rebuilds the branch's ordered strike-seed bundle, asks Cyna for global first
