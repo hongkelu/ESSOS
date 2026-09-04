@@ -190,6 +190,7 @@ def _pyna_poincare_map():
 def _pyna_periodic_api():
     try:
         from pyna.topo.jax_periodic import (
+            periodic_orbit_trajectory_state,
             periodic_point_state,
             solve_periodic_point,
         )
@@ -197,7 +198,11 @@ def _pyna_periodic_api():
         raise ImportError(
             "ESSOS X-line objectives require PyNA's optional-JAX topology backend"
         ) from exc
-    return solve_periodic_point, periodic_point_state
+    return (
+        solve_periodic_point,
+        periodic_point_state,
+        periodic_orbit_trajectory_state,
+    )
 
 
 def _pyna_manifold_api():
@@ -297,7 +302,7 @@ def periodic_xline_position(
     ESSOS design variables.
     """
 
-    solve_periodic_point, _ = _pyna_periodic_api()
+    solve_periodic_point, _, _ = _pyna_periodic_api()
     return solve_periodic_point(
         essos_field_callable,
         field,
@@ -327,7 +332,7 @@ def periodic_xline_state(
 ) -> Any:
     """Return PyNA's position, monodromy, and stability data for an X-line."""
 
-    _, periodic_point_state = _pyna_periodic_api()
+    _, periodic_point_state, _ = _pyna_periodic_api()
     return periodic_point_state(
         essos_field_callable,
         field,
@@ -341,6 +346,134 @@ def periodic_xline_state(
         bphi_floor=bphi_floor,
         residual_tolerance=residual_tolerance,
     )
+
+
+def periodic_xline_trajectory(
+    field: Any,
+    initial_guess: Any,
+    *,
+    phi_span: Any,
+    phi_start: Any = 0.0,
+    map_power: int = 1,
+    n_steps_per_span: int = 256,
+    newton_iterations: int = 8,
+    newton_damping: float = 1.0,
+    bphi_floor: float = 0.0,
+    residual_tolerance: float = 1.0e-10,
+) -> Any:
+    """Return PyNA's differentiable trajectory for a tracked periodic X-line."""
+
+    _, _, periodic_orbit_trajectory_state = _pyna_periodic_api()
+    return periodic_orbit_trajectory_state(
+        essos_field_callable,
+        field,
+        initial_guess,
+        phi_span=phi_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_steps_per_span=n_steps_per_span,
+        newton_iterations=newton_iterations,
+        newton_damping=newton_damping,
+        bphi_floor=bphi_floor,
+        residual_tolerance=residual_tolerance,
+    )
+
+
+def periodic_xline_clearance_residuals(
+    field: Any,
+    initial_guess: Any,
+    wall_signed_distance: Callable[[Any], Any],
+    *,
+    minimum_clearance_m: float,
+    clearance_scale_m: float,
+    phi_span: Any,
+    phi_start: Any = 0.0,
+    map_power: int = 1,
+    n_steps_per_span: int = 256,
+    newton_iterations: int = 8,
+    newton_damping: float = 1.0,
+    bphi_floor: float = 0.0,
+    residual_tolerance: float = 1.0e-10,
+    sample_stride: int = 1,
+) -> Any:
+    """Return normalized clearance violations along a periodic X-line.
+
+    ``wall_signed_distance(point_xyz)`` must return a scalar physical distance
+    in metres that is positive on the allowed side of the wall.  The closing
+    endpoint is omitted because it duplicates the launch point.  This smooth
+    inner-loop hinge does not replace PyNA/Cyna's global wall-hit validation.
+    """
+
+    if not callable(wall_signed_distance):
+        raise TypeError("wall_signed_distance must be callable")
+    minimum = float(minimum_clearance_m)
+    scale = float(clearance_scale_m)
+    if not np.isfinite(minimum) or minimum < 0.0:
+        raise ValueError("minimum_clearance_m must be non-negative and finite")
+    if not np.isfinite(scale) or scale <= 0.0:
+        raise ValueError("clearance_scale_m must be positive and finite")
+    stride = _positive_integer(sample_stride, "sample_stride")
+
+    trajectory = periodic_xline_trajectory(
+        field,
+        initial_guess,
+        phi_span=phi_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_steps_per_span=n_steps_per_span,
+        newton_iterations=newton_iterations,
+        newton_damping=newton_damping,
+        bphi_floor=bphi_floor,
+        residual_tolerance=residual_tolerance,
+    )
+    sample_points = trajectory.point_xyz[:-1:stride]
+
+    def distance(point_xyz):
+        value = jnp.asarray(wall_signed_distance(point_xyz))
+        if value.shape != ():
+            raise ValueError("wall_signed_distance must return a scalar")
+        return value
+
+    clearances = jax.vmap(distance)(sample_points)
+    return jnp.maximum(minimum - clearances, 0.0) / scale
+
+
+def periodic_xline_clearance_loss(
+    field: Any,
+    initial_guess: Any,
+    wall_signed_distance: Callable[[Any], Any],
+    *,
+    minimum_clearance_m: float,
+    clearance_scale_m: float,
+    phi_span: Any,
+    phi_start: Any = 0.0,
+    map_power: int = 1,
+    n_steps_per_span: int = 256,
+    newton_iterations: int = 8,
+    newton_damping: float = 1.0,
+    bphi_floor: float = 0.0,
+    residual_tolerance: float = 1.0e-10,
+    sample_stride: int = 1,
+) -> Any:
+    """Mean squared-hinge wall-clearance loss for a tracked periodic X-line."""
+
+    residuals = periodic_xline_clearance_residuals(
+        field,
+        initial_guess,
+        wall_signed_distance,
+        minimum_clearance_m=minimum_clearance_m,
+        clearance_scale_m=clearance_scale_m,
+        phi_span=phi_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_steps_per_span=n_steps_per_span,
+        newton_iterations=newton_iterations,
+        newton_damping=newton_damping,
+        bphi_floor=bphi_floor,
+        residual_tolerance=residual_tolerance,
+        sample_stride=sample_stride,
+    )
+    return 0.5 * jnp.mean(residuals * residuals)
 
 
 def periodic_xline_location_loss(
@@ -704,10 +837,13 @@ __all__ = [
     "fixed_phi_poincare_map",
     "fixed_phi_poincare_map_from_coils",
     "manifold_sample_location_loss",
+    "periodic_xline_clearance_loss",
+    "periodic_xline_clearance_residuals",
     "periodic_xline_hyperbolicity_loss",
     "periodic_xline_location_loss",
     "periodic_xline_position",
     "periodic_xline_state",
+    "periodic_xline_trajectory",
     "return_map_surface_loss",
     "return_map_surface_residuals",
     "trace_manifold_branch",

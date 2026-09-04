@@ -13,9 +13,12 @@ pytest.importorskip("pyna.topo.jax_periodic")
 
 from essos.losses import custom_loss
 from essos.manifold import (
+    periodic_xline_clearance_loss,
+    periodic_xline_clearance_residuals,
     periodic_xline_hyperbolicity_loss,
     periodic_xline_location_loss,
     periodic_xline_state,
+    periodic_xline_trajectory,
 )
 
 
@@ -164,6 +167,85 @@ def test_xline_hyperbolicity_window_and_gradient_are_analytic():
     np.testing.assert_allclose(no_penalty, 0.0, atol=1e-15)
 
 
+def _circular_wall_clearance(point_xyz):
+    radius = jnp.sqrt(point_xyz[0] ** 2 + point_xyz[1] ** 2)
+    distance_from_centerline = jnp.sqrt(
+        (radius - 1.0) ** 2 + point_xyz[2] ** 2
+    )
+    return 0.15 - distance_from_centerline
+
+
+def test_xline_trajectory_and_clearance_gradient_are_analytic():
+    parameters = jnp.array([0.28, 1.03, 0.025])
+    minimum_clearance = 0.12
+    clearance_scale = 0.01
+
+    trajectory = periodic_xline_trajectory(
+        _ShiftedHyperbolicField(parameters),
+        INITIAL_GUESS,
+        phi_start=PHI_START,
+        phi_span=PHI_SPAN,
+        map_power=2,
+        n_steps_per_span=48,
+        newton_iterations=4,
+    )
+    assert trajectory.point_xyz.shape == (97, 3)
+    np.testing.assert_allclose(trajectory.closure_error, 0.0, atol=3e-14)
+
+    def objective(dynamic_parameters):
+        return periodic_xline_clearance_loss(
+            _ShiftedHyperbolicField(dynamic_parameters),
+            INITIAL_GUESS,
+            _circular_wall_clearance,
+            minimum_clearance_m=minimum_clearance,
+            clearance_scale_m=clearance_scale,
+            phi_start=PHI_START,
+            phi_span=PHI_SPAN,
+            n_steps_per_span=96,
+            newton_iterations=4,
+            sample_stride=8,
+        )
+
+    radial_offset = float(parameters[1] - 1.0)
+    vertical_offset = float(parameters[2])
+    centerline_distance = np.hypot(radial_offset, vertical_offset)
+    clearance = 0.15 - centerline_distance
+    violation = minimum_clearance - clearance
+    expected_value = 0.5 * (violation / clearance_scale) ** 2
+    expected_gradient = np.asarray(
+        [
+            0.0,
+            violation * radial_offset
+            / (clearance_scale**2 * centerline_distance),
+            violation * vertical_offset
+            / (clearance_scale**2 * centerline_distance),
+        ]
+    )
+    value, gradient = jax.value_and_grad(objective)(parameters)
+    np.testing.assert_allclose(value, expected_value, rtol=2e-12)
+    np.testing.assert_allclose(
+        gradient,
+        expected_gradient,
+        rtol=2e-11,
+        atol=1e-12,
+    )
+
+    residuals = periodic_xline_clearance_residuals(
+        _ShiftedHyperbolicField(parameters),
+        INITIAL_GUESS,
+        _circular_wall_clearance,
+        minimum_clearance_m=minimum_clearance,
+        clearance_scale_m=clearance_scale,
+        phi_start=PHI_START,
+        phi_span=PHI_SPAN,
+        n_steps_per_span=96,
+        newton_iterations=4,
+        sample_stride=8,
+    )
+    assert residuals.shape == (12,)
+    np.testing.assert_allclose(residuals, violation / clearance_scale)
+
+
 def test_xline_location_loss_composes_with_essos_custom_loss():
     field = _ShiftedHyperbolicField(jnp.array([0.28, 1.03, 0.025]))
     loss = custom_loss(
@@ -215,4 +297,41 @@ def test_xline_losses_validate_static_configuration():
             phi_span=PHI_SPAN,
             minimum_margin=0.2,
             maximum_margin=0.1,
+        )
+    with pytest.raises(TypeError, match="wall_signed_distance"):
+        periodic_xline_clearance_loss(
+            field,
+            INITIAL_GUESS,
+            None,
+            minimum_clearance_m=0.01,
+            clearance_scale_m=0.01,
+            phi_span=PHI_SPAN,
+        )
+    with pytest.raises(ValueError, match="minimum_clearance_m"):
+        periodic_xline_clearance_loss(
+            field,
+            INITIAL_GUESS,
+            _circular_wall_clearance,
+            minimum_clearance_m=-0.01,
+            clearance_scale_m=0.01,
+            phi_span=PHI_SPAN,
+        )
+    with pytest.raises(ValueError, match="clearance_scale_m"):
+        periodic_xline_clearance_loss(
+            field,
+            INITIAL_GUESS,
+            _circular_wall_clearance,
+            minimum_clearance_m=0.01,
+            clearance_scale_m=0.0,
+            phi_span=PHI_SPAN,
+        )
+    with pytest.raises(ValueError, match="sample_stride"):
+        periodic_xline_clearance_loss(
+            field,
+            INITIAL_GUESS,
+            _circular_wall_clearance,
+            minimum_clearance_m=0.01,
+            clearance_scale_m=0.01,
+            phi_span=PHI_SPAN,
+            sample_stride=0,
         )

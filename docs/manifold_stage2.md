@@ -29,7 +29,7 @@ engineering terms.
 `periodic_xline_position` and `periodic_xline_state` now pass an ESSOS field to
 PyNA's implicitly differentiable periodic-point solve.  On a Poincare section,
 the returned point represents the toroidally continued X-line.  ESSOS supplies
-two initial smooth objective terms:
+three initial smooth objective terms:
 
 - `periodic_xline_location_loss` places the tracked section point relative to a
   Stage-1 target with independent R and Z scales.
@@ -37,11 +37,20 @@ two initial smooth objective terms:
   direct- or inverse-hyperbolic margin window.  The branch sign is fixed by the
   outer topology tracker, preventing an inner optimization from silently
   switching X-line identity.
+- `periodic_xline_clearance_loss` samples the complete implicitly tracked
+  periodic orbit and applies a normalized squared hinge to an ESSOS-supplied
+  wall signed-distance function.  Distance is positive on the allowed side,
+  and the duplicate closing point is omitted from the average.
 
 The inner loss never decides whether Newton found the intended orbit.  Before
 accepting an optimizer step, the outer loop must inspect the residual and
 `converged` flag, update the initial guess, and compare against the production
 PyNA/Cyna map.
+
+The clearance term is likewise an inner sequential model, not a collision
+certificate.  PyNA's JAX trajectory supplies derivatives on CPU or CUDA,
+depending on the installed JAX backend.  Cyna retains global wall-intersection
+authority during the outer accepted-design refresh.
 
 ## Parallel JAX and Cyna manifold paths
 
