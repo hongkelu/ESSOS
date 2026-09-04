@@ -81,11 +81,20 @@ Gradients include both X-line motion and the field dependence accumulated along
 the manifold maps, while direction, spacing, side, and correspondence remain
 stop-gradient outer state.
 
-This sample-location loss is a smooth lobe/divertor-leg placement proxy.  It is
-not yet an exact strike-point objective: wall intersection, branch relabelling,
-connection length, and heat-load evaluation remain PyNA/Cyna outer-loop
-milestones.  Accepted ESSOS steps must be re-traced there before their topology
-is trusted.
+This sample-location loss remains a useful smooth lobe/divertor-leg placement
+proxy.  For a wall-resolved target, `ManifoldStrikeStage2Target` stores PyNA's
+exact `(branch, trace direction, sparse seed order)` strike label and the local
+wall tangent plane frozen at the accepted Cyna hit.  Its ESSOS custom loss asks
+PyNA's JAX backend to move the periodic X-line, rebuild that exact seed, trace
+to the implicit local wall event, and differentiate the resulting hit point
+through the live coil field.
+
+The strike metric is explicit.  Axisymmetric tokamaks use `(R,Z)`, because the
+toroidal hit phase is symmetry-degenerate.  QA and other non-axisymmetric
+configurations use full Cartesian `(X,Y,Z)`.  The local plane is only an inner
+sequential model: Cyna still owns global first-wall selection, branch identity,
+connection length, and the refreshed plane after every accepted outer step.
+The JAX loss never searches for a new hit or silently changes labels.
 
 ## Immutable target state and accepted refreshes
 
@@ -182,9 +191,10 @@ small PF-current perturbation, so the test can verify that optimization
 recovers the control and reduces the differentiable target loss without
 confounding the result with target-selection physics.
 
-This establishes a solved physical tokamak coil-to-topology loop.  Wall strike
-selection, wall clearance/loading terms, and simultaneous coil-shape
-optimization remain subsequent milestones.
+This establishes a solved physical tokamak coil-to-topology loop.  The next
+layer adds the exact labelled first-wall strike as a differentiable ESSOS
+target; production strike refresh/acceptance, wall clearance or loading terms,
+and simultaneous coil-shape optimization remain subsequent milestones.
 
 ## Optimizer proposal rollback
 
