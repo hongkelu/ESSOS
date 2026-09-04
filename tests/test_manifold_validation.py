@@ -32,7 +32,9 @@ from essos.manifold_optimization import (
     ManifoldContinuationState,
     ManifoldStage2Target,
 )
+from essos.manifold_heat_optimization import ManifoldHeatStage2Target
 from essos.manifold_validation import (
+    ManifoldHeatValidationConfig,
     XLineClearanceValidationConfig,
     validate_manifold_continuation_candidate,
 )
@@ -230,6 +232,64 @@ def _strike_target(branch):
     )
 
 
+def _heat_target(branch, *, maximum_heat_flux_W_m2=2.0e3):
+    hit_R = 1.02
+    matches = []
+    planes = []
+    for bundle_seed_index, seed_order in enumerate(branch.seed_orders):
+        seed_R = branch.anchor_RZ_m[0] + (
+            branch.seed_side
+            * branch.seed_distances_m[bundle_seed_index]
+            * branch.direction_RZ[0]
+        )
+        hit_phi = branch.section_phi + np.log(
+            (hit_R - branch.anchor_RZ_m[0])
+            / (seed_R - branch.anchor_RZ_m[0])
+        ) / RATE
+        label = ManifoldStrikeLabel(branch.label, "+", int(seed_order))
+        hit_xyz = np.array(
+            [hit_R * np.cos(hit_phi), hit_R * np.sin(hit_phi), 0.0]
+        )
+        matches.append(
+            ManifoldStrikeMatch(
+                label=label,
+                point_RZPhi_m_rad=np.array([hit_R, 0.0, hit_phi]),
+                target_distance_m=0.0,
+                connection_length_m=abs(hit_R * hit_phi),
+                bundle_seed_index=bundle_seed_index,
+                distance_mode="xyz",
+            )
+        )
+        planes.append(
+            LocalWallPlane(
+                strike_label=label,
+                point_xyz_m=hit_xyz,
+                normal_xyz=np.array([np.cos(hit_phi), np.sin(hit_phi), 0.0]),
+                wall_phi_rad=hit_phi,
+                wall_s=0.0,
+                projection_distance_m=0.0,
+            )
+        )
+    monitor_centers = np.stack([match.point_xyz_m for match in matches])
+    return ManifoldHeatStage2Target(
+        branch_reference=branch,
+        strike_matches=tuple(matches),
+        wall_planes=tuple(planes),
+        strike_powers_W=np.array([4.0, 6.0]),
+        power_provenance="analytic absolute-power validation",
+        wall_cell_centers_xyz_m=monitor_centers,
+        wall_cell_areas_m2=np.full(len(matches), 0.01),
+        deposition_width_m=0.01,
+        maximum_heat_flux_W_m2=maximum_heat_flux_W_m2,
+        heat_flux_scale_W_m2=1.0e3,
+        maximum_phi_shift=0.5,
+        n_steps_per_span=N_STEPS_PER_SPAN,
+        xline_newton_iterations=4,
+        wall_n_steps=512,
+        wall_newton_iterations=6,
+    )
+
+
 def _analytic_strike_trace(parameters, hit_R):
     rate, center_r, _center_z = map(float, parameters)
 
@@ -277,6 +337,28 @@ def _strike_continuation_state():
         schedule,
         state.target_state,
         strike_target_state=_strike_target(state.target_state.branch_reference),
+    )
+
+
+def _heat_continuation_state(*, maximum_heat_flux_W_m2=2.0e3):
+    state = _continuation_state()
+    schedule = ManifoldContinuationSchedule(
+        (
+            ManifoldContinuationStage(name="base"),
+            ManifoldContinuationStage(
+                name="manifold-heat",
+                manifold_weight=0.1,
+                heat_weight=0.2,
+            ),
+        )
+    )
+    return ManifoldContinuationState(
+        schedule,
+        state.target_state,
+        heat_target_state=_heat_target(
+            state.target_state.branch_reference,
+            maximum_heat_flux_W_m2=maximum_heat_flux_W_m2,
+        ),
     )
 
 
@@ -413,6 +495,62 @@ def test_candidate_validation_advances_strike_state_only_after_its_gates():
         is report.strike_validation.strike_refresh.candidate_match
     )
     assert report.diagnostics["jax_cyna_strike_deviation_m"] < 2.0e-8
+
+
+def test_candidate_validation_requires_and_applies_production_heat_gate():
+    _require_cyna()
+    pytest.importorskip("joblib")
+    candidate_parameters = np.array([0.36, 1.0003, 0.0])
+    candidate = _ShiftedHyperbolicField(jnp.asarray(candidate_parameters))
+    wall = _strike_wall()
+
+    def heat_config():
+        return ManifoldHeatValidationConfig(
+            wall=wall,
+            phi_edges=np.linspace(0.0, 2.0 * np.pi, 9),
+            s_edges=np.linspace(0.0, 1.0, 17),
+            maximum_hit_displacement_m=0.5,
+            maximum_projection_distance_m=2.0e-4,
+            max_turns=4,
+            production_DPhi=0.01,
+            production_trace_function=_analytic_strike_trace(
+                candidate_parameters,
+                1.02,
+            ),
+        )
+
+    state = _heat_continuation_state()
+    with pytest.raises(TypeError, match="requires ManifoldHeatValidationConfig"):
+        _validate(candidate, state)
+    accepted = _validate(
+        candidate,
+        state,
+        heat_validation_config=heat_config(),
+    )
+    assert accepted.accepted
+    assert accepted.heat_validation.accepted
+    assert accepted.heat_validation.all_labels_resolved
+    assert accepted.diagnostics["production_unresolved_power_W"] == 0.0
+    assert accepted.diagnostics["production_peak_heat_flux_W_m2"] < 2.0e3
+    assert accepted.accepted_state.heat_target_state is not None
+    assert (
+        accepted.accepted_state.heat_target_state.strike_matches
+        == accepted.heat_validation.strike_matches
+    )
+
+    rejected_state = _heat_continuation_state(maximum_heat_flux_W_m2=1.0)
+    rejected = _validate(
+        candidate,
+        rejected_state,
+        heat_validation_config=heat_config(),
+    )
+    assert not rejected.accepted
+    assert rejected.rejection_reason.endswith("peak_heat_flux_exceeds_limit")
+    assert rejected.correspondence is None
+    assert rejected.sample_refresh is None
+    assert rejected.heat_validation is not None
+    assert not rejected.heat_validation.accepted
+    assert rejected.accepted_state is None
 
 
 def test_candidate_validation_stops_after_production_anchor_rejection():

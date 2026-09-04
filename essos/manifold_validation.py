@@ -22,6 +22,7 @@ from essos.manifold_optimization import (
     accept_manifold_continuation_stage,
     trace_manifold_reference,
 )
+from essos.manifold_heat_optimization import refresh_manifold_heat_stage2_target
 from essos.manifold_strike_validation import (
     ManifoldStrikeValidationConfig,
     validate_manifold_strike_candidate,
@@ -40,6 +41,7 @@ def _pyna_validation_api():
         from pyna.topo.xline_clearance import (
             validate_periodic_xline_clearance,
         )
+        from pyna.topo.manifold_heat import validate_manifold_heat_load
     except ImportError as exc:  # pragma: no cover - depends on installation
         raise ImportError(
             "ESSOS manifold candidate validation requires PyNA and Cyna"
@@ -49,6 +51,7 @@ def _pyna_validation_api():
         compare_jax_manifold_branch,
         refresh_manifold_sample_match,
         validate_periodic_xline_clearance,
+        validate_manifold_heat_load,
     )
 
 
@@ -84,6 +87,65 @@ class XLineClearanceValidationConfig:
 
 
 @dataclass(frozen=True)
+class ManifoldHeatValidationConfig:
+    """ESSOS orchestration settings for PyNA's production heat-load gate."""
+
+    wall: Any
+    phi_edges: Sequence[float]
+    s_edges: Sequence[float]
+    maximum_hit_displacement_m: float
+    maximum_unresolved_power_W: float = 0.0
+    maximum_projection_distance_m: float = 1.0e-3
+    max_turns: int = 100
+    production_DPhi: float = 0.01
+    field_period: float | None = None
+    extend_phi: bool = True
+    production_trace_function: Callable[..., Any] | None = None
+
+    def __post_init__(self) -> None:
+        for attribute in (
+            "maximum_hit_displacement_m",
+            "maximum_unresolved_power_W",
+            "maximum_projection_distance_m",
+        ):
+            value = float(getattr(self, attribute))
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"{attribute} must be non-negative and finite")
+            object.__setattr__(self, attribute, value)
+        for attribute in ("phi_edges", "s_edges"):
+            values = np.asarray(getattr(self, attribute), dtype=float).ravel()
+            if (
+                values.size < 2
+                or not np.all(np.isfinite(values))
+                or np.any(np.diff(values) <= 0.0)
+            ):
+                raise ValueError(
+                    f"{attribute} must contain at least two finite increasing values"
+                )
+            object.__setattr__(self, attribute, values.copy())
+        turns = int(self.max_turns)
+        if turns != self.max_turns or turns <= 0:
+            raise ValueError("max_turns must be a positive integer")
+        step = float(self.production_DPhi)
+        if not np.isfinite(step) or step <= 0.0:
+            raise ValueError("production_DPhi must be positive and finite")
+        if self.field_period is None:
+            period = None
+        else:
+            period = float(self.field_period)
+            if not np.isfinite(period) or period <= 0.0:
+                raise ValueError("field_period must be positive and finite")
+        if self.production_trace_function is not None and not callable(
+            self.production_trace_function
+        ):
+            raise TypeError("production_trace_function must be callable or None")
+        object.__setattr__(self, "max_turns", turns)
+        object.__setattr__(self, "production_DPhi", step)
+        object.__setattr__(self, "field_period", period)
+        object.__setattr__(self, "extend_phi", bool(self.extend_phi))
+
+
+@dataclass(frozen=True)
 class ManifoldContinuationValidationReport:
     """All PyNA reports and optional next state for one trial coil field."""
 
@@ -100,6 +162,7 @@ class ManifoldContinuationValidationReport:
         repr=False,
     )
     xline_clearance_validation: Any | None = None
+    heat_validation: Any | None = None
 
     def __post_init__(self) -> None:
         accepted = bool(self.accepted)
@@ -138,6 +201,16 @@ class ManifoldContinuationValidationReport:
             ):
                 raise ValueError(
                     "an accepted validation requires its X-line clearance gate"
+                )
+            if (
+                self.accepted_state.heat_target_state is not None
+                and (
+                    self.heat_validation is None
+                    or not bool(getattr(self.heat_validation, "accepted", False))
+                )
+            ):
+                raise ValueError(
+                    "an accepted heat-aware validation requires its heat gate"
                 )
         else:
             if reason is None:
@@ -185,6 +258,7 @@ def validate_manifold_continuation_candidate(
     n_threads: int = -1,
     strike_validation_config: ManifoldStrikeValidationConfig | None = None,
     xline_clearance_config: XLineClearanceValidationConfig | None = None,
+    heat_validation_config: ManifoldHeatValidationConfig | None = None,
 ) -> ManifoldContinuationValidationReport:
     """Validate a trial field and advance only after all PyNA gates pass.
 
@@ -202,6 +276,19 @@ def validate_manifold_continuation_candidate(
     elif not isinstance(strike_validation_config, ManifoldStrikeValidationConfig):
         raise TypeError(
             "an active strike target requires ManifoldStrikeValidationConfig"
+        )
+    if continuation_state.stage.heat_weight > 0.0 and (
+        continuation_state.heat_target_state is None
+    ):
+        raise ValueError("an active heat term requires heat_target_state")
+    if continuation_state.heat_target_state is None:
+        if heat_validation_config is not None:
+            raise ValueError(
+                "heat_validation_config requires an active heat target"
+            )
+    elif not isinstance(heat_validation_config, ManifoldHeatValidationConfig):
+        raise TypeError(
+            "an active heat target requires ManifoldHeatValidationConfig"
         )
     clearance_is_active = (
         continuation_state.stage.xline_clearance_weight > 0.0
@@ -227,6 +314,7 @@ def validate_manifold_continuation_candidate(
         compare_jax_manifold_branch,
         refresh_manifold_sample_match,
         validate_periodic_xline_clearance,
+        validate_manifold_heat_load,
     ) = _pyna_validation_api()
 
     production_field = essos_field_to_pyna_cylindrical_grid(
@@ -314,6 +402,68 @@ def validate_manifold_continuation_candidate(
                 },
                 xline_clearance_validation=xline_clearance_validation,
             )
+    heat_validation = None
+    accepted_heat_target = None
+    if continuation_state.heat_target_state is not None:
+        config = heat_validation_config
+        heat_target = continuation_state.heat_target_state
+        heat_validation = validate_manifold_heat_load(
+            production_field,
+            candidate_branch,
+            config.wall,
+            strike_powers_W=heat_target.strike_powers_W,
+            power_provenance=heat_target.power_provenance,
+            phi_edges=config.phi_edges,
+            s_edges=config.s_edges,
+            max_turns=config.max_turns,
+            DPhi=config.production_DPhi,
+            maximum_heat_flux_W_m2=(
+                heat_target.maximum_heat_flux_W_m2
+            ),
+            maximum_unresolved_power_W=(
+                config.maximum_unresolved_power_W
+            ),
+            maximum_projection_distance_m=(
+                config.maximum_projection_distance_m
+            ),
+            previous_matches=heat_target.strike_matches,
+            maximum_hit_displacement_m=(
+                config.maximum_hit_displacement_m
+            ),
+            field_period=config.field_period,
+            extend_phi=config.extend_phi,
+            trace_function=config.production_trace_function,
+        )
+        if not heat_validation.accepted:
+            return ManifoldContinuationValidationReport(
+                production_refresh=production_refresh,
+                correspondence=None,
+                sample_refresh=None,
+                accepted_state=None,
+                accepted=False,
+                rejection_reason=(
+                    "heat_validation:"
+                    f"{heat_validation.rejection_reason or 'unknown'}"
+                ),
+                diagnostics={
+                    "production_peak_heat_flux_W_m2": (
+                        heat_validation.peak_heat_flux_W_m2
+                    ),
+                    "maximum_heat_flux_W_m2": (
+                        heat_validation.maximum_heat_flux_W_m2
+                    ),
+                    "production_unresolved_power_W": (
+                        heat_validation.unresolved_power_W
+                    ),
+                },
+                xline_clearance_validation=xline_clearance_validation,
+                heat_validation=heat_validation,
+            )
+        accepted_heat_target = refresh_manifold_heat_stage2_target(
+            heat_target,
+            candidate_branch,
+            heat_validation,
+        )
     jax_trace = trace_manifold_reference(
         candidate_field,
         candidate_branch,
@@ -349,6 +499,7 @@ def validate_manifold_continuation_candidate(
                 "production_branch_complete": correspondence.complete,
             },
             xline_clearance_validation=xline_clearance_validation,
+            heat_validation=heat_validation,
         )
     if not sample_refresh.accepted:
         return ManifoldContinuationValidationReport(
@@ -368,6 +519,7 @@ def validate_manifold_continuation_candidate(
                 ),
             },
             xline_clearance_validation=xline_clearance_validation,
+            heat_validation=heat_validation,
         )
 
     strike_validation = None
@@ -404,6 +556,7 @@ def validate_manifold_continuation_candidate(
                 strike_validation=strike_validation,
                 diagnostics=strike_validation.diagnostics,
                 xline_clearance_validation=xline_clearance_validation,
+                heat_validation=heat_validation,
             )
         accepted_strike_target = strike_validation.accepted_target
 
@@ -413,6 +566,7 @@ def validate_manifold_continuation_candidate(
         sample_refresh,
         correspondence,
         accepted_strike_target=accepted_strike_target,
+        accepted_heat_target=accepted_heat_target,
     )
     return ManifoldContinuationValidationReport(
         production_refresh=production_refresh,
@@ -439,6 +593,18 @@ def validate_manifold_continuation_candidate(
             ),
             **(
                 {}
+                if heat_validation is None
+                else {
+                    "production_peak_heat_flux_W_m2": (
+                        heat_validation.peak_heat_flux_W_m2
+                    ),
+                    "production_unresolved_power_W": (
+                        heat_validation.unresolved_power_W
+                    ),
+                }
+            ),
+            **(
+                {}
                 if strike_validation is None
                 else {
                     "strike_displacement_m": (
@@ -451,11 +617,13 @@ def validate_manifold_continuation_candidate(
             ),
         },
         xline_clearance_validation=xline_clearance_validation,
+        heat_validation=heat_validation,
     )
 
 
 __all__ = [
     "ManifoldContinuationValidationReport",
+    "ManifoldHeatValidationConfig",
     "XLineClearanceValidationConfig",
     "validate_manifold_continuation_candidate",
 ]

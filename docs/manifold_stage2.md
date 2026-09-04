@@ -205,12 +205,16 @@ step boundary.  Given a trial ESSOS field and an explicit production grid, it:
 3. when X-line clearance is active, asks Cyna to sample the complete production
    orbit and PyNA to reject domain loss, closure drift, or insufficient signed
    clearance from the continuously interpolated wall;
-4. traces the candidate branch directly through the live ESSOS field with JAX;
-5. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
+4. when a heat target is carried, asks Cyna to retrace every labelled global
+   first-wall hit and PyNA to reject unresolved power, label loss, wall-
+   projection failure, excessive strike motion, or a production heat-flux
+   limit violation;
+5. traces the candidate branch directly through the live ESSOS field with JAX;
+6. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
    sample label under its displacement limit;
-6. when a strike target is active, runs the global Cyna wall trace, exact strike
+7. when a strike target is active, runs the global Cyna wall trace, exact strike
    refresh, local-plane rebuild, and metric-specific JAX/Cyna strike gate; and
-7. returns a new continuation state only when every required gate accepts.
+8. returns a new continuation state only when every required gate accepts.
 
 The returned `ManifoldContinuationValidationReport` retains the individual
 PyNA reports and a stable rejection reason.  A rejected report contains no
@@ -318,8 +322,10 @@ which is essential after crossing an `nfp=2` field-period seam.
 
 This closes the first physical QA coil/wall and three-dimensional strike
 checkpoint, including a true QA modular-coil shape step and periodic-X-line
-clearance.  Wall heat loading, pre-strike manifold-leg clearance, and multi-DOF
-engineering-constrained optimization remain subsequent milestones.
+clearance.  The generic differentiable/production heat-load transaction is now
+implemented, while a physical QA heat-power checkpoint, pre-strike
+manifold-leg clearance, and multi-DOF engineering-constrained optimization
+remain subsequent milestones.
 
 ## Optimizer proposal rollback
 

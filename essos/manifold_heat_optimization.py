@@ -15,7 +15,7 @@ trace, connection-length physics, or authoritative heat map.
 from __future__ import annotations
 
 import operator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
 import jax
@@ -123,6 +123,13 @@ class ManifoldHeatStage2Target:
         labels = tuple(match.label for match in matches)
         if len(set(labels)) != len(labels):
             raise ValueError("strike labels must be unique")
+        expected_seed_orders = tuple(
+            int(order) for order in self.branch_reference.seed_orders
+        )
+        if tuple(match.label.seed_order for match in matches) != expected_seed_orders:
+            raise ValueError(
+                "strike matches must follow the complete branch seed order"
+            )
         for match, plane in zip(matches, planes, strict=True):
             if match.label.branch_label != self.branch_reference.label:
                 raise ValueError("strike match belongs to a different manifold branch")
@@ -352,6 +359,54 @@ def make_manifold_heat_stage2_loss(
     )
 
 
+def refresh_manifold_heat_stage2_target(
+    target_state: ManifoldHeatStage2Target,
+    candidate_branch: Any,
+    heat_validation: Any,
+) -> ManifoldHeatStage2Target:
+    """Accept PyNA's quantitative heat report without changing fixed physics."""
+
+    if not isinstance(target_state, ManifoldHeatStage2Target):
+        raise TypeError("target_state must be ManifoldHeatStage2Target")
+    try:
+        from pyna.topo.manifold_correspondence import ManifoldBranchReference
+        from pyna.topo.manifold_heat import ManifoldHeatValidationReport
+    except ImportError as exc:  # pragma: no cover - depends on installation
+        raise ImportError(
+            "ESSOS manifold heat refresh requires PyNA's production heat gate"
+        ) from exc
+    if not isinstance(candidate_branch, ManifoldBranchReference):
+        raise TypeError("candidate_branch must be a PyNA ManifoldBranchReference")
+    if not isinstance(heat_validation, ManifoldHeatValidationReport):
+        raise TypeError("heat_validation must be a PyNA ManifoldHeatValidationReport")
+    if not heat_validation.accepted:
+        reason = heat_validation.rejection_reason or "unknown"
+        raise ValueError(f"PyNA rejected manifold heat validation: {reason}")
+    if heat_validation.branch_label != candidate_branch.label:
+        raise ValueError("heat validation belongs to a different manifold branch")
+    if tuple(match.label.key for match in heat_validation.strike_matches) != (
+        target_state.labels
+    ):
+        raise ValueError("heat validation changed the ordered strike labels")
+    if not np.array_equal(
+        heat_validation.strike_powers_W,
+        target_state.strike_powers_W,
+    ):
+        raise ValueError("heat validation changed strike_powers_W")
+    if heat_validation.power_provenance != target_state.power_provenance:
+        raise ValueError("heat validation changed power provenance")
+    if heat_validation.maximum_heat_flux_W_m2 != (
+        target_state.maximum_heat_flux_W_m2
+    ):
+        raise ValueError("heat validation used a different heat-flux limit")
+    return replace(
+        target_state,
+        branch_reference=candidate_branch,
+        strike_matches=heat_validation.strike_matches,
+        wall_planes=heat_validation.wall_planes,
+    )
+
+
 __all__ = [
     "ManifoldHeatFluxState",
     "ManifoldHeatStage2Target",
@@ -359,5 +414,6 @@ __all__ = [
     "manifold_heat_flux_state",
     "manifold_heat_stage2_limit_loss",
     "power_conserving_gaussian_heat_flux",
+    "refresh_manifold_heat_stage2_target",
     "trace_manifold_heat_reference",
 ]
