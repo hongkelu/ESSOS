@@ -173,3 +173,20 @@ A small PF-current candidate remains within `2e-3 m` anchor and exact-sample
 trust limits and advances the continuation state.  This establishes a physical
 tokamak coil-to-topology loop; wall strike selection and a solved divertor
 target objective remain subsequent milestones.
+
+## Optimizer proposal rollback
+
+`validated_manifold_backtracking_step` is the narrow adapter from an arbitrary
+optimizer to the outer validation transaction.  It accepts the last approved
+flat ESSOS DOFs, an optimizer proposal, a field reconstruction callback, and a
+candidate-validation callback.  Trial fractions start at one and contract
+toward the accepted DOFs until topology validation succeeds or the attempt
+budget is exhausted.
+
+Every contraction is tested against the same preceding topology snapshot.  An
+accepted attempt returns its trial DOFs, field, and PyNA-approved next
+continuation state.  If every attempt is rejected, the result has zero accepted
+step fraction and reconstructs the unchanged input field and state.  Backend or
+configuration exceptions propagate instead of being treated as reasons to
+shrink a physically meaningful coil step.  This keeps proposal generation with
+SciPy, JAXopt, or Optax while keeping topology-based acceptance with PyNA.

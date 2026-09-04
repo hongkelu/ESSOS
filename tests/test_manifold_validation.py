@@ -19,6 +19,7 @@ from pyna.topo.toroidal import FixedPoint
 from pyna.toroidal.flt import trace_fixed_point_manifolds_field
 
 from essos.manifold import essos_field_to_pyna_cylindrical_grid
+from essos.manifold_driver import validated_manifold_backtracking_step
 from essos.manifold_optimization import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
@@ -242,3 +243,69 @@ def test_candidate_validation_can_require_a_complete_production_branch():
     assert not report.correspondence.accepted
     assert report.rejection_reason == "jax_cyna_correspondence_failed"
     assert report.accepted_state is None
+
+
+def test_backtracking_contracts_an_optimizer_proposal_to_an_accepted_state():
+    _require_cyna()
+    state = _continuation_state()
+    current = np.array([RATE, 1.0, 0.0])
+    proposed = np.array([0.36, 1.01, 0.0])
+
+    result = validated_manifold_backtracking_step(
+        current,
+        proposed,
+        lambda dofs: _ShiftedHyperbolicField(jnp.asarray(dofs)),
+        state,
+        lambda field, accepted_state: _validate(
+            field,
+            accepted_state,
+            maximum_anchor_displacement_m=2.0e-3,
+        ),
+        contraction=0.25,
+        maximum_attempts=4,
+    )
+
+    assert result.accepted
+    np.testing.assert_allclose(
+        [attempt.step_fraction for attempt in result.attempts],
+        [1.0, 0.25, 0.0625],
+    )
+    assert not result.attempts[0].validation.accepted
+    assert not result.attempts[1].validation.accepted
+    assert result.attempts[2].validation.accepted
+    np.testing.assert_allclose(
+        result.dofs,
+        current + 0.0625 * (proposed - current),
+    )
+    np.testing.assert_allclose(result.field.parameters, result.dofs)
+    assert result.continuation_state.stage_index == 1
+    assert state.stage_index == 0
+
+
+def test_backtracking_returns_the_unchanged_field_when_no_attempt_accepts():
+    _require_cyna()
+    state = _continuation_state()
+    current = np.array([RATE, 1.0, 0.0])
+    proposed = np.array([0.36, 1.1, 0.0])
+
+    result = validated_manifold_backtracking_step(
+        current,
+        proposed,
+        lambda dofs: _ShiftedHyperbolicField(jnp.asarray(dofs)),
+        state,
+        lambda field, accepted_state: _validate(
+            field,
+            accepted_state,
+            maximum_anchor_displacement_m=2.0e-3,
+        ),
+        contraction=0.5,
+        maximum_attempts=2,
+    )
+
+    assert not result.accepted
+    np.testing.assert_allclose(result.dofs, current)
+    np.testing.assert_allclose(result.field.parameters, current)
+    assert result.continuation_state is state
+    assert result.step_fraction == 0.0
+    assert len(result.attempts) == 2
+    assert all(not attempt.validation.accepted for attempt in result.attempts)
