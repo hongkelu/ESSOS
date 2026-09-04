@@ -95,6 +95,7 @@ class ManifoldContinuationStage:
     xline_weight: float = 0.0
     manifold_weight: float = 0.0
     strike_weight: float = 0.0
+    xline_clearance_weight: float = 0.0
 
     def __post_init__(self) -> None:
         name = str(self.name).strip()
@@ -104,6 +105,7 @@ class ManifoldContinuationStage:
         for attribute in (
             "return_map_weight",
             "xline_weight",
+            "xline_clearance_weight",
             "manifold_weight",
             "strike_weight",
         ):
@@ -120,6 +122,7 @@ class ManifoldContinuationStage:
             for weight in (
                 self.return_map_weight,
                 self.xline_weight,
+                self.xline_clearance_weight,
                 self.manifold_weight,
                 self.strike_weight,
             )
@@ -416,6 +419,7 @@ def compose_manifold_stage2_loss(
     *,
     return_map_loss: base_loss | None = None,
     xline_loss: base_loss | None = None,
+    xline_clearance_loss: base_loss | None = None,
     field_dependency: str = "field",
     dependencies: Mapping[str, Any] | None = None,
 ) -> base_loss:
@@ -437,6 +441,11 @@ def compose_manifold_stage2_loss(
     optional_terms = (
         (stage.return_map_weight, return_map_loss, "return_map_loss"),
         (stage.xline_weight, xline_loss, "xline_loss"),
+        (
+            stage.xline_clearance_weight,
+            xline_clearance_loss,
+            "xline_clearance_loss",
+        ),
     )
     for weight, loss, name in optional_terms:
         if weight == 0.0:

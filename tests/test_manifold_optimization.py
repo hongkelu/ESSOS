@@ -262,6 +262,7 @@ def _continuation_schedule():
                 name="topology",
                 return_map_weight=0.3,
                 xline_weight=0.2,
+                xline_clearance_weight=0.1,
                 manifold_weight=0.4,
             ),
         )
@@ -280,6 +281,8 @@ def test_continuation_schedule_is_immutable_and_validated():
 
     with pytest.raises(ValueError, match="non-negative"):
         ManifoldContinuationStage(name="bad", manifold_weight=-1.0)
+    with pytest.raises(ValueError, match="non-negative"):
+        ManifoldContinuationStage(name="bad-clearance", xline_clearance_weight=-1.0)
     with pytest.raises(ValueError, match="unique"):
         ManifoldContinuationSchedule(
             (
@@ -314,17 +317,22 @@ def test_continuation_composes_weighted_value_and_gradient():
     def xline_z_objective(dynamic_field):
         return 2.0 * dynamic_field.parameters[2] ** 2
 
+    def xline_clearance_objective(dynamic_field):
+        return 3.0 * dynamic_field.parameters[1] ** 2
+
     base = custom_loss(base_objective, "field")
     return_map = custom_loss(return_map_objective, "field")
     xline = custom_loss(xline_r_objective, "field") + custom_loss(
         xline_z_objective,
         "field",
     )
+    xline_clearance = custom_loss(xline_clearance_objective, "field")
     total = compose_manifold_stage2_loss(
         base,
         state,
         return_map_loss=return_map,
         xline_loss=xline,
+        xline_clearance_loss=xline_clearance,
         dependencies={"field": field},
     )
 
@@ -335,6 +343,7 @@ def test_continuation_composes_weighted_value_and_gradient():
             + 0.3 * return_map_objective(dynamic_field)
             + 0.2
             * (xline_r_objective(dynamic_field) + xline_z_objective(dynamic_field))
+            + 0.1 * xline_clearance_objective(dynamic_field)
             + 0.4
             * manifold_stage2_target_loss(
                 dynamic_field,
@@ -367,6 +376,24 @@ def test_continuation_omits_inactive_terms_and_requires_active_ones():
         compose_manifold_stage2_loss(
             base,
             active_state,
+            dependencies={"field": field},
+        )
+
+    clearance_only_state = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(
+                    name="clearance",
+                    xline_clearance_weight=1.0,
+                ),
+            )
+        ),
+        target_state,
+    )
+    with pytest.raises(ValueError, match="xline_clearance_loss"):
+        compose_manifold_stage2_loss(
+            base,
+            clearance_only_state,
             dependencies={"field": field},
         )
 

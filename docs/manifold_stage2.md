@@ -143,16 +143,18 @@ accepted snapshot.
 
 `ManifoldContinuationSchedule` separates the ordinary Stage-2 coil objective
 from the topology ramp.  Every named stage holds fixed weights for the
-return-map, combined X-line, exact-label manifold-sample, and exact-label wall
-strike terms.  The caller chooses the dimensional normalization inside each
-objective and then chooses these dimensionless continuation weights; no
-universal numerical ramp is assumed.
+return-map, combined X-line, periodic-X-line wall-clearance, exact-label
+manifold-sample, and exact-label wall-strike terms.  The caller chooses the
+dimensional normalization inside each objective and then chooses these
+dimensionless continuation weights; no universal numerical ramp is assumed.
 
 `compose_manifold_stage2_loss` keeps the supplied normal-field and engineering
 loss active with unit weight and adds only topology terms whose current weights
 are positive.  In particular, the initial all-zero topology stage is exactly an
 ordinary Stage-2 solve and does not compile or evaluate PyNA tracing.  A
 combined X-line loss may include both location and hyperbolicity components.
+The independently weighted `xline_clearance_loss` lets later continuation
+stages introduce the full-orbit wall margin without changing those terms.
 The manifold component is constructed internally from the active immutable
 target so it cannot accidentally use a different sample label.  A positive
 `strike_weight` likewise requires an immutable `strike_target_state` and builds
