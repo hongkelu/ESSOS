@@ -133,3 +133,24 @@ target refresh and advances to the next stage only if it succeeds.  It returns
 a new frozen state; an exception leaves the previous state unchanged.  Coil
 degrees of freedom and optimizer rollback remain with the calling ESSOS driver,
 while production retracing and both acceptance decisions remain with PyNA.
+
+## Candidate validation transaction
+
+`validate_manifold_continuation_candidate` connects the pieces at an outer
+step boundary.  Given a trial ESSOS field and an explicit production grid, it:
+
+1. samples the trial field into a PyNA cylindrical snapshot;
+2. asks PyNA/Cyna to continue the X-point and retrace the same sparse seed
+   orders under anchor and tangent trust limits;
+3. traces the candidate branch directly through the live ESSOS field with JAX;
+4. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
+   target label under its sample-displacement limit; and
+5. returns a new continuation state only when every gate accepts.
+
+The returned `ManifoldContinuationValidationReport` retains the individual
+PyNA reports and a stable rejection reason.  A rejected report contains no
+accepted state, so an ESSOS driver can keep the preceding coil field and reduce
+its step or topology weight.  By default, Cyna branches may be incomplete
+because wall termination is physical; the selected label must still exist.
+Setting `require_complete_correspondence=True` is useful for domain-resolution
+tests where every requested generation is expected to remain inside the grid.
