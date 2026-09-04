@@ -61,6 +61,10 @@ from essos.manifold_optimization import (
     ManifoldStage2Target,
     trace_manifold_reference,
 )
+from essos.manifold_heat_optimization import (
+    ManifoldHeatStage2Target,
+    manifold_heat_flux_state,
+)
 from essos.manifold_strike_optimization import (
     ManifoldStrikeStage2Target,
     manifold_strike_stage2_target_loss,
@@ -68,6 +72,7 @@ from essos.manifold_strike_optimization import (
 )
 from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
 from essos.manifold_validation import (
+    ManifoldHeatValidationConfig,
     XLineClearanceValidationConfig,
     validate_manifold_continuation_candidate,
 )
@@ -532,6 +537,44 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         target_position_m=np.asarray(desired_trace.intersection.point_xyz),
         position_scales_m=np.full(3, 1.0e-4),
     )
+    wall_normal = wall_plane.normal_xyz
+    toroidal_tangent = np.array(
+        [-np.sin(match.point_RZPhi_m_rad[2]), np.cos(match.point_RZPhi_m_rad[2]), 0.0]
+    )
+    toroidal_tangent -= np.dot(toroidal_tangent, wall_normal) * wall_normal
+    toroidal_tangent /= np.linalg.norm(toroidal_tangent)
+    poloidal_tangent = np.cross(wall_normal, toroidal_tangent)
+    heat_monitor_centers = np.stack(
+        (
+            match.point_xyz_m,
+            match.point_xyz_m + 5.0e-3 * toroidal_tangent,
+            match.point_xyz_m - 5.0e-3 * toroidal_tangent,
+            match.point_xyz_m + 5.0e-3 * poloidal_tangent,
+            match.point_xyz_m - 5.0e-3 * poloidal_tangent,
+        )
+    )
+    heat_target = ManifoldHeatStage2Target(
+        branch_reference=branch,
+        strike_matches=(match,),
+        wall_planes=(wall_plane,),
+        strike_powers_W=np.array([1.0]),
+        power_provenance="prescribed 1 W QA regression; not a transport prediction",
+        wall_cell_centers_xyz_m=heat_monitor_centers,
+        wall_cell_areas_m2=np.full(heat_monitor_centers.shape[0], 2.5e-5),
+        deposition_width_m=5.0e-3,
+        maximum_heat_flux_W_m2=1.0e5,
+        heat_flux_scale_W_m2=1.0e5,
+        maximum_phi_shift=0.1,
+        n_steps_per_span=640,
+        xline_newton_iterations=8,
+        xline_newton_damping=0.8,
+        wall_n_steps=1024,
+        wall_newton_iterations=8,
+        wall_newton_damping=1.0,
+        bphi_floor=1.0e-10,
+        xline_residual_tolerance=1.0e-8,
+        wall_residual_tolerance=1.0e-8,
+    )
 
     sample_label = branch.sample_label(branch.n_generations, 0)
     sample_match = ManifoldSampleMatch(
@@ -558,12 +601,14 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
                     name="strike",
                     strike_weight=1.0,
                     xline_clearance_weight=0.1,
+                    heat_weight=0.1,
                 ),
             )
         ),
         sample_target,
         stage_index=1,
         strike_target_state=shape_target,
+        heat_target_state=heat_target,
     )
     strike_config = ManifoldStrikeValidationConfig(
         wall=wall,
@@ -578,6 +623,18 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         required_minimum_clearance_m=5.0e-4,
         maximum_closure_error_m=1.0e-4,
         production_DPhi=QA_WALL_DPHI,
+    )
+    heat_validation_config = ManifoldHeatValidationConfig(
+        wall=wall,
+        phi_edges=np.linspace(0.0, QA_FIELD_PERIOD, 65),
+        s_edges=np.linspace(0.0, 1.0, 129),
+        maximum_hit_displacement_m=2.0e-3,
+        jax_cyna_tolerance_m=1.5e-3,
+        maximum_unresolved_power_W=0.0,
+        maximum_projection_distance_m=4.0e-3,
+        max_turns=3,
+        production_DPhi=QA_WALL_DPHI,
+        field_period=QA_FIELD_PERIOD,
     )
     wall_signed_distance = _qa_wall_radial_signed_distance(wall)
 
@@ -664,6 +721,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
             n_threads=1,
             strike_validation_config=strike_config,
             xline_clearance_config=xline_clearance_config,
+            heat_validation_config=heat_validation_config,
         )
 
     initial_loss = manifold_strike_stage2_target_loss(
@@ -671,6 +729,10 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         target_state=shape_target,
     )
     initial_clearance_loss = clearance_loss(initial_shape_dof)
+    initial_heat_state = manifold_heat_flux_state(
+        _qa_shape_field(initial_shape_dof),
+        target_state=heat_target,
+    )
     result = validated_manifold_backtracking_step(
         np.array([QA_SHAPE_DOF_NOMINAL]),
         np.array([proposed_shape_dof]),
@@ -685,6 +747,10 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         target_state=shape_target,
     )
     final_clearance_loss = clearance_loss(result.dofs[0])
+    final_heat_state = manifold_heat_flux_state(
+        result.field,
+        target_state=heat_target,
+    )
     nominal_lengths = np.asarray(
         _qa_shape_field(QA_SHAPE_DOF_NOMINAL).coils.length
     )
@@ -699,6 +765,10 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     assert float(final_loss) < 1.0e-5 * float(initial_loss)
     np.testing.assert_allclose(initial_clearance_loss, 0.0, atol=1.0e-14)
     np.testing.assert_allclose(final_clearance_loss, 0.0, atol=1.0e-14)
+    np.testing.assert_allclose(initial_heat_state.deposited_power_W, 1.0, atol=1.0e-12)
+    np.testing.assert_allclose(final_heat_state.deposited_power_W, 1.0, atol=1.0e-12)
+    assert float(np.max(initial_heat_state.heat_flux_W_m2)) < 1.0e5
+    assert float(np.max(final_heat_state.heat_flux_W_m2)) < 1.0e5
     assert 2.0e-5 < maximum_length_change < 4.0e-5
     accepted = result.attempts[-1].validation
     assert accepted.production_refresh.anchor_displacement_m < 6.0e-4
@@ -715,6 +785,17 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         < 2.0e-6
     )
     assert accepted.strike_validation.accepted
+    assert accepted.heat_validation.accepted
+    assert accepted.heat_validation.unresolved_power_W == pytest.approx(0.0)
+    assert accepted.heat_validation.peak_heat_flux_W_m2 < 1.0e5
+    assert accepted.heat_correspondence.accepted
+    assert accepted.heat_correspondence.max_deviation_m < 1.0e-3
+    assert float(
+        np.sum(
+            accepted.heat_validation.heat_state.heat
+            * accepted.heat_validation.heat_state.cell_areas
+        )
+    ) == pytest.approx(1.0)
     assert (
         accepted.strike_validation.strike_refresh.hit_displacement_m
         < 6.0e-4
@@ -731,4 +812,9 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     np.testing.assert_allclose(
         result.continuation_state.strike_target_state.target_position_m,
         shape_target.target_position_m,
+    )
+    assert result.continuation_state.heat_target_state.labels == heat_target.labels
+    np.testing.assert_allclose(
+        result.continuation_state.heat_target_state.strike_powers_W,
+        heat_target.strike_powers_W,
     )

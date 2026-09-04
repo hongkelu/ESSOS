@@ -321,12 +321,21 @@ Wall projections are rotated back
 to the signed, unwrapped orbit phase before their inside/outside sign is used,
 which is essential after crossing an `nfp=2` field-period seam.
 
+It also carries the first physical-coil heat transaction with a deliberately
+prescribed `1 W` regression load on seed order 30.  This absolute input is
+labelled in provenance as a regression value, not a transport or reactor-power
+prediction.  The ESSOS inner model deposits it on a five-cell local tangent
+patch and conserves the watt before and after the accepted shape step.  The
+independent PyNA/Cyna gate retraces the global hit, deposits exactly `1 W` on a
+`64 x 128` full-wall grid with zero unresolved power, stays below the explicit
+`1e5 W/m^2` regression limit, and keeps the bundled local-event discrepancy
+below `1 mm`.
+
 This closes the first physical QA coil/wall and three-dimensional strike
 checkpoint, including a true QA modular-coil shape step and periodic-X-line
-clearance.  The generic differentiable/production heat-load transaction is now
-implemented, while a physical QA heat-power checkpoint, pre-strike
-manifold-leg clearance, and multi-DOF engineering-constrained optimization
-remain subsequent milestones.
+clearance plus an end-to-end prescribed-power heat gate.  A transport-derived
+QA power allocation, pre-strike manifold-leg clearance, and multi-DOF
+engineering-constrained optimization remain subsequent milestones.
 
 ## Optimizer proposal rollback
 
