@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -24,6 +26,7 @@ from pyna.toroidal.flt import (
     refine_fixed_points_monodromy_span_field,
     trace_fixed_point_manifolds_field,
 )
+from pyna.toroidal.geometry import ToroidalWall
 
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
@@ -42,6 +45,12 @@ from essos.manifold_optimization import (
     trace_manifold_reference,
 )
 from essos.manifold_validation import validate_manifold_continuation_candidate
+from essos.manifold_strike_optimization import (
+    ManifoldStrikeStage2Target,
+    manifold_strike_stage2_target_loss,
+    trace_manifold_strike_reference,
+)
+from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
 
 
 N_TF = 8
@@ -108,7 +117,25 @@ def _require_cyna():
         pytest.skip("cyna VectorFieldCylind is unavailable")
 
 
-def _tokamak_production_branch(field):
+def _tokamak_production_field(field):
+    return essos_field_to_pyna_cylindrical_grid(
+        field,
+        PRODUCTION_R,
+        PRODUCTION_Z,
+        PRODUCTION_PHI,
+        nfp=N_TF,
+        batch_size=512,
+    )
+
+
+def _tokamak_production_branch(
+    field,
+    *,
+    production_field=None,
+    seed_distances=(1.0e-5, 3.0e-5),
+    seed_orders=(2, 5),
+    n_generations=2,
+):
     xline = periodic_xline_state(
         field,
         INITIAL_GUESS,
@@ -117,14 +144,8 @@ def _tokamak_production_branch(field):
         newton_iterations=6,
         bphi_floor=1.0e-8,
     )
-    production_field = essos_field_to_pyna_cylindrical_grid(
-        field,
-        PRODUCTION_R,
-        PRODUCTION_Z,
-        PRODUCTION_PHI,
-        nfp=N_TF,
-        batch_size=512,
-    )
+    if production_field is None:
+        production_field = _tokamak_production_field(field)
     fixed_point = FixedPoint(
         phi=0.0,
         R=float(xline.position[0]),
@@ -153,17 +174,79 @@ def _tokamak_production_branch(field):
         [production_xline],
         phi_section=0.0,
         map_span=float(MAP_SPAN),
-        N_turns=2,
+        N_turns=n_generations,
         DPhi=float(MAP_SPAN) / 64,
-        seed_distances=np.array([1.0e-5, 3.0e-5]),
-        seed_orders=np.array([2, 5]),
+        seed_distances=np.asarray(seed_distances, dtype=float),
+        seed_orders=np.asarray(seed_orders, dtype=int),
         refine_stable_inverse_anchor=False,
     )[0]
     return manifold_branch_reference_from_trace(
         payload,
         stability="unstable",
         seed_side=1,
-        n_generations=2,
+        n_generations=n_generations,
+    )
+
+
+def _tokamak_wall():
+    theta = np.linspace(0.0, 2.0 * np.pi, 128, endpoint=False)
+    section_R = 1.5 + 0.15 * np.cos(theta)
+    section_Z = -0.1 + 0.15 * np.sin(theta)
+    return ToroidalWall(
+        PRODUCTION_PHI,
+        np.broadcast_to(
+            section_R,
+            (PRODUCTION_PHI.size, theta.size),
+        ).copy(),
+        np.broadcast_to(
+            section_Z,
+            (PRODUCTION_PHI.size, theta.size),
+        ).copy(),
+        nfp=N_TF,
+    )
+
+
+def _tokamak_strike_target(branch, production_field, wall):
+    from pyna.topo.manifold_strike import (
+        local_wall_plane_from_strike,
+        manifold_branch_strike_seed_bundle,
+        select_manifold_strike_match,
+    )
+    from pyna.toroidal.control.strike_heat import trace_wall_strikes_field
+
+    bundle = manifold_branch_strike_seed_bundle(branch)
+    strikes = trace_wall_strikes_field(
+        production_field,
+        (bundle,),
+        wall,
+        max_turns=20,
+        DPhi=float(MAP_SPAN) / 128,
+    )[0]
+    assert strikes.R.size == 1
+    match = select_manifold_strike_match(
+        bundle,
+        strikes,
+        np.array([strikes.R[0], strikes.Z[0]]),
+        distance_mode="rz",
+    )
+    plane = local_wall_plane_from_strike(
+        match,
+        wall,
+        maximum_projection_distance_m=1.0e-5,
+    )
+    return ManifoldStrikeStage2Target(
+        branch_reference=branch,
+        strike_match=match,
+        wall_plane=plane,
+        target_position_m=match.point_RZ_m,
+        position_scales_m=np.array([1.0e-4, 1.0e-4]),
+        maximum_phi_shift=0.2,
+        n_steps_per_span=64,
+        xline_newton_iterations=6,
+        wall_n_steps=512,
+        wall_newton_iterations=6,
+        bphi_floor=1.0e-8,
+        wall_residual_tolerance=1.0e-9,
     )
 
 
@@ -174,7 +257,7 @@ def _tokamak_continuation_state(
     rz_scales_m=(1.0e-3, 1.0e-3),
     stage_index=0,
 ):
-    label = branch.sample_label(2, 0)
+    label = branch.sample_label(branch.n_generations, 0)
     point = branch.point(label)
     jax_seed_index = branch.seed_index(label.seed_order)
     match = ManifoldSampleMatch(
@@ -205,7 +288,12 @@ def _tokamak_continuation_state(
     )
 
 
-def _validate_tokamak_candidate(field, continuation):
+def _validate_tokamak_candidate(
+    field,
+    continuation,
+    *,
+    strike_validation_config=None,
+):
     return validate_manifold_continuation_candidate(
         field,
         continuation,
@@ -220,6 +308,7 @@ def _validate_tokamak_candidate(field, continuation):
         jax_cyna_tolerance_m=2.0e-4,
         production_DPhi=float(MAP_SPAN) / 64,
         require_complete_correspondence=True,
+        strike_validation_config=strike_validation_config,
     )
 
 
@@ -419,3 +508,120 @@ def test_bounded_pf_current_step_reaches_a_manifold_target():
     assert result.continuation_state.stage_index == 1
     assert result.continuation_state.target_state.label == label.key
     assert result.attempts[-1].validation.correspondence.max_deviation_m < 2.0e-4
+
+
+def test_bounded_pf_current_step_reaches_a_first_wall_strike():
+    _require_cyna()
+    pytest.importorskip("joblib")
+    nominal_field = _physical_field(1.0)
+    production_field = _tokamak_production_field(nominal_field)
+    branch = _tokamak_production_branch(
+        nominal_field,
+        production_field=production_field,
+        seed_distances=(1.0e-2,),
+        seed_orders=(11,),
+        n_generations=1,
+    )
+    wall = _tokamak_wall()
+    initial_strike_target = _tokamak_strike_target(
+        branch,
+        production_field,
+        wall,
+    )
+    desired_control = 1.0002
+    desired_trace = trace_manifold_strike_reference(
+        _physical_field(desired_control),
+        initial_strike_target,
+    )
+    target_RZ_m = np.asarray(desired_trace.intersection.point_RZPhi[:2])
+    strike_target = replace(
+        initial_strike_target,
+        target_position_m=target_RZ_m,
+    )
+
+    sample_state = _tokamak_continuation_state(
+        branch,
+        target_RZ_m=branch.point(branch.sample_label(1, 0)),
+        stage_index=1,
+    )
+    schedule = ManifoldContinuationSchedule(
+        (
+            ManifoldContinuationStage(name="base"),
+            ManifoldContinuationStage(name="strike", strike_weight=1.0),
+        )
+    )
+    continuation = ManifoldContinuationState(
+        schedule,
+        sample_state.target_state,
+        stage_index=1,
+        strike_target_state=strike_target,
+    )
+    strike_config = ManifoldStrikeValidationConfig(
+        wall=wall,
+        maximum_hit_displacement_m=2.0e-3,
+        maximum_projection_distance_m=1.0e-4,
+        jax_cyna_tolerance_m=5.0e-4,
+        max_turns=20,
+        production_DPhi=float(MAP_SPAN) / 128,
+    )
+
+    def endpoint(control):
+        return trace_manifold_strike_reference(
+            _physical_field(control),
+            strike_target,
+        ).intersection.point_RZPhi[:2]
+
+    initial_control = jnp.asarray(1.0)
+    initial_endpoint = endpoint(initial_control)
+    normalized_residual = (
+        initial_endpoint - target_RZ_m
+    ) / strike_target.position_scales_m
+    normalized_jacobian = (
+        jax.jacfwd(endpoint)(initial_control)
+        / strike_target.position_scales_m
+    )
+    gauss_newton_step = -jnp.vdot(
+        normalized_jacobian,
+        normalized_residual,
+    ) / jnp.vdot(normalized_jacobian, normalized_jacobian)
+    proposed_control = np.clip(
+        float(initial_control + gauss_newton_step),
+        0.999,
+        1.001,
+    )
+    initial_loss = manifold_strike_stage2_target_loss(
+        nominal_field,
+        target_state=strike_target,
+    )
+
+    result = validated_manifold_backtracking_step(
+        np.array([float(initial_control)]),
+        np.array([proposed_control]),
+        lambda dofs: _physical_field(dofs[0]),
+        continuation,
+        lambda field, state: _validate_tokamak_candidate(
+            field,
+            state,
+            strike_validation_config=strike_config,
+        ),
+        contraction=0.5,
+        maximum_attempts=4,
+    )
+    final_loss = manifold_strike_stage2_target_loss(
+        result.field,
+        target_state=strike_target,
+    )
+
+    assert result.accepted
+    assert result.step_fraction == 1.0
+    assert abs(result.dofs[0] - desired_control) < 2.0e-6
+    assert float(final_loss) < 1.0e-5 * float(initial_loss)
+    accepted = result.attempts[-1].validation
+    assert accepted.strike_validation.accepted
+    assert accepted.strike_validation.correspondence.deviation_m < 5.0e-4
+    assert accepted.strike_validation.strike_refresh.hit_displacement_m < 2.0e-3
+    assert (
+        result.continuation_state.strike_target_state.label
+        == strike_target.label
+    )
+    assert result.continuation_state.strike_target_state.distance_mode == "rz"

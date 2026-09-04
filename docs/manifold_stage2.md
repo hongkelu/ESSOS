@@ -209,10 +209,21 @@ small PF-current perturbation, so the test can verify that optimization
 recovers the control and reduces the differentiable target loss without
 confounding the result with target-selection physics.
 
-This establishes a solved physical tokamak coil-to-topology loop.  The next
-layer adds the exact labelled first-wall strike as a differentiable ESSOS
-target; production strike refresh/acceptance, wall clearance or loading terms,
-and simultaneous coil-shape optimization remain subsequent milestones.
+The wall-resolved checkpoint uses a larger `1e-2 m` sparse seed so the first
+connection to a circular tokamak vessel is short enough for the live
+Biot--Savart and interpolated production fields to be meaningfully compared.
+Cyna selects seed order 11 and its first hit; ESSOS/JAX differentiates the same
+label against a local wall plane using the axisymmetric `(R,Z)` metric.  The
+measured JAX/Cyna discrepancy is about `2.6e-4 m`, inside an explicit
+`5e-4 m` gate.
+
+A known PF-current control of `1.0002` generates the strike target.  One scalar
+Gauss--Newton step proposes approximately `1.00019998`, the full step passes
+branch, sample, strike-label, wall-event, and JAX/Cyna validation, and the
+normalized strike loss drops by roughly eight orders of magnitude.  This is a
+solved physical tokamak coil-to-first-wall optimization loop.  Wall loading or
+clearance objectives, simultaneous coil-shape optimization, and a physical QA
+coil/wall regression remain subsequent milestones.
 
 ## Optimizer proposal rollback
 
