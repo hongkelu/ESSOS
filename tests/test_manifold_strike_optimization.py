@@ -11,7 +11,10 @@ import jax.numpy as jnp
 
 pytest.importorskip("pyna.topo.jax_strike")
 
-from pyna.topo.manifold_correspondence import ManifoldBranchReference
+from pyna.topo.manifold_correspondence import (
+    ManifoldBranchReference,
+    ManifoldSampleMatch,
+)
 from pyna.topo.manifold_strike_contracts import (
     LocalWallPlane,
     ManifoldStrikeLabel,
@@ -24,6 +27,14 @@ from essos.manifold_strike_optimization import (
     manifold_strike_stage2_target_loss,
     trace_manifold_strike_reference,
 )
+from essos.manifold_optimization import (
+    ManifoldContinuationSchedule,
+    ManifoldContinuationStage,
+    ManifoldContinuationState,
+    ManifoldStage2Target,
+    compose_manifold_stage2_loss,
+)
+from essos.losses import custom_loss
 
 
 @jax.tree_util.register_pytree_node_class
@@ -151,6 +162,26 @@ def _target_state(parameters, distance_mode="rz"):
     )
 
 
+def _sample_target_state(parameters):
+    branch = _branch_reference(parameters)
+    label = branch.sample_label(1, 0)
+    point = branch.point(label)
+    match = ManifoldSampleMatch(
+        label=label,
+        point_RZ_m=point,
+        distance_m=0.0,
+        jax_seed_index=0,
+    )
+    return ManifoldStage2Target(
+        branch_reference=branch,
+        sample_match=match,
+        target_RZ_m=point,
+        rz_scales_m=np.array([0.01, 0.01]),
+        n_steps_per_span=64,
+        newton_iterations=4,
+    )
+
+
 def _analytic_loss(parameters, distance_mode):
     rate, center_r, center_z = parameters
     radius = center_r + SEED_DISTANCE * jnp.exp(rate * PHI_HIT)
@@ -218,6 +249,59 @@ def test_strike_target_builds_a_jitted_essos_custom_loss():
     )(parameters)
     np.testing.assert_allclose(value, expected_value, rtol=3.0e-12)
     np.testing.assert_allclose(gradient, expected_gradient, rtol=5.0e-10)
+
+
+def test_continuation_composes_the_fixed_label_strike_value_and_gradient():
+    parameters = jnp.asarray(PARAMETERS)
+    field = _ShiftedHyperbolicField(parameters)
+    strike_target = _target_state(PARAMETERS)
+    strike_weight = 0.3
+    continuation = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(
+                    name="strike",
+                    strike_weight=strike_weight,
+                ),
+            )
+        ),
+        _sample_target_state(PARAMETERS),
+        strike_target_state=strike_target,
+    )
+    base = custom_loss(
+        lambda dynamic_field: dynamic_field.parameters[0] ** 2,
+        "field",
+    )
+    total = compose_manifold_stage2_loss(
+        base,
+        continuation,
+        dependencies={"field": field},
+    )
+
+    expected = lambda dynamic_parameters: (
+        dynamic_parameters[0] ** 2
+        + strike_weight
+        * manifold_strike_stage2_target_loss(
+            _ShiftedHyperbolicField(dynamic_parameters),
+            target_state=strike_target,
+        )
+    )
+    value = total(total.starting_dofs)
+    gradient = total.grad(total.starting_dofs)
+    expected_value, expected_gradient = jax.value_and_grad(expected)(parameters)
+    np.testing.assert_allclose(value, expected_value, rtol=3.0e-12)
+    np.testing.assert_allclose(gradient, expected_gradient, rtol=5.0e-10)
+
+    without_strike = ManifoldContinuationState(
+        continuation.schedule,
+        continuation.target_state,
+    )
+    with pytest.raises(ValueError, match="strike_target_state"):
+        compose_manifold_stage2_loss(
+            base,
+            without_strike,
+            dependencies={"field": field},
+        )
 
 
 def test_strike_target_validates_metric_shape_and_label_identity():

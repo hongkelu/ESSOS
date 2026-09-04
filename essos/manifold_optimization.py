@@ -16,6 +16,10 @@ import numpy as np
 
 from essos.losses import base_loss, composite_loss, custom_loss
 from essos.manifold import trace_manifold_branch
+from essos.manifold_strike_optimization import (
+    ManifoldStrikeStage2Target,
+    make_manifold_strike_stage2_loss,
+)
 
 
 def _pyna_correspondence_api():
@@ -90,6 +94,7 @@ class ManifoldContinuationStage:
     return_map_weight: float = 0.0
     xline_weight: float = 0.0
     manifold_weight: float = 0.0
+    strike_weight: float = 0.0
 
     def __post_init__(self) -> None:
         name = str(self.name).strip()
@@ -100,6 +105,7 @@ class ManifoldContinuationStage:
             "return_map_weight",
             "xline_weight",
             "manifold_weight",
+            "strike_weight",
         ):
             object.__setattr__(
                 self,
@@ -115,6 +121,7 @@ class ManifoldContinuationStage:
                 self.return_map_weight,
                 self.xline_weight,
                 self.manifold_weight,
+                self.strike_weight,
             )
         )
 
@@ -150,12 +157,20 @@ class ManifoldContinuationState:
     schedule: ManifoldContinuationSchedule
     target_state: ManifoldStage2Target
     stage_index: int = 0
+    strike_target_state: ManifoldStrikeStage2Target | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, ManifoldContinuationSchedule):
             raise TypeError("schedule must be ManifoldContinuationSchedule")
         if not isinstance(self.target_state, ManifoldStage2Target):
             raise TypeError("target_state must be ManifoldStage2Target")
+        if self.strike_target_state is not None and not isinstance(
+            self.strike_target_state,
+            ManifoldStrikeStage2Target,
+        ):
+            raise TypeError(
+                "strike_target_state must be ManifoldStrikeStage2Target or None"
+            )
         object.__setattr__(
             self,
             "stage_index",
@@ -440,6 +455,18 @@ def compose_manifold_stage2_loss(
         sources.append(manifold_loss)
         weighted_terms.append(_scaled_loss(manifold_loss, stage.manifold_weight))
 
+    if stage.strike_weight > 0.0:
+        if continuation_state.strike_target_state is None:
+            raise ValueError(
+                "strike_target_state is required when strike_weight is positive"
+            )
+        strike_loss = make_manifold_strike_stage2_loss(
+            continuation_state.strike_target_state,
+            field_dependency=field_dependency,
+        )
+        sources.append(strike_loss)
+        weighted_terms.append(_scaled_loss(strike_loss, stage.strike_weight))
+
     total = base
     for term in weighted_terms:
         total = total + term
@@ -452,6 +479,8 @@ def accept_manifold_continuation_stage(
     candidate_branch: Any,
     sample_refresh: Any,
     correspondence: Any,
+    *,
+    accepted_strike_target: ManifoldStrikeStage2Target | None = None,
 ) -> ManifoldContinuationState:
     """Advance only after PyNA accepts label refresh and JAX/Cyna parity."""
 
@@ -463,6 +492,28 @@ def accept_manifold_continuation_stage(
         sample_refresh,
         correspondence,
     )
+    active_strike_target = continuation_state.strike_target_state
+    if active_strike_target is None:
+        if accepted_strike_target is not None:
+            raise ValueError("cannot add a strike target during stage acceptance")
+        refreshed_strike_target = None
+    else:
+        if accepted_strike_target is None:
+            raise ValueError("the active strike target requires accepted refresh state")
+        if not isinstance(accepted_strike_target, ManifoldStrikeStage2Target):
+            raise TypeError(
+                "accepted_strike_target must be ManifoldStrikeStage2Target"
+            )
+        if accepted_strike_target.label != active_strike_target.label:
+            raise ValueError("accepted strike refresh changed the active label")
+        if accepted_strike_target.distance_mode != active_strike_target.distance_mode:
+            raise ValueError("accepted strike refresh changed the distance mode")
+        if not np.array_equal(
+            accepted_strike_target.target_position_m,
+            active_strike_target.target_position_m,
+        ):
+            raise ValueError("accepted strike refresh changed the physical target")
+        refreshed_strike_target = accepted_strike_target
     next_index = min(
         continuation_state.stage_index + 1,
         len(continuation_state.schedule) - 1,
@@ -471,6 +522,7 @@ def accept_manifold_continuation_stage(
         continuation_state,
         target_state=refreshed_target,
         stage_index=next_index,
+        strike_target_state=refreshed_strike_target,
     )
 
 

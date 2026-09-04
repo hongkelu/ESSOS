@@ -37,6 +37,20 @@ def _pyna_strike_validation_api():
 
 
 @dataclass(frozen=True)
+class ManifoldStrikeValidationConfig:
+    """Outer-loop wall trace and trust limits for one strike target."""
+
+    wall: Any
+    maximum_hit_displacement_m: float
+    maximum_projection_distance_m: float
+    jax_cyna_tolerance_m: float
+    max_turns: int
+    production_DPhi: float
+    production_trace_function: Callable[..., Mapping[str, Any]] | None = None
+    extend_phi: bool = True
+
+
+@dataclass(frozen=True)
 class ManifoldStrikeValidationReport:
     """Production, label-refresh, local-event, and parity gates for one hit."""
 
@@ -225,6 +239,7 @@ def validate_manifold_strike_candidate(
 
 
 __all__ = [
+    "ManifoldStrikeValidationConfig",
     "ManifoldStrikeValidationReport",
     "validate_manifold_strike_candidate",
 ]

@@ -134,9 +134,10 @@ accepted snapshot.
 
 `ManifoldContinuationSchedule` separates the ordinary Stage-2 coil objective
 from the topology ramp.  Every named stage holds fixed weights for the
-return-map, combined X-line, and exact-label manifold terms.  The caller chooses
-the dimensional normalization inside each objective and then chooses these
-dimensionless continuation weights; no universal numerical ramp is assumed.
+return-map, combined X-line, exact-label manifold-sample, and exact-label wall
+strike terms.  The caller chooses the dimensional normalization inside each
+objective and then chooses these dimensionless continuation weights; no
+universal numerical ramp is assumed.
 
 `compose_manifold_stage2_loss` keeps the supplied normal-field and engineering
 loss active with unit weight and adds only topology terms whose current weights
@@ -144,13 +145,19 @@ are positive.  In particular, the initial all-zero topology stage is exactly an
 ordinary Stage-2 solve and does not compile or evaluate PyNA tracing.  A
 combined X-line loss may include both location and hyperbolicity components.
 The manifold component is constructed internally from the active immutable
-target so it cannot accidentally use a different sample label.
+target so it cannot accidentally use a different sample label.  A positive
+`strike_weight` likewise requires an immutable `strike_target_state` and builds
+the local-wall loss internally; no wall tracing is compiled when that weight is
+zero.
 
-After an inner solve, `accept_manifold_continuation_stage` calls the two-gate
-target refresh and advances to the next stage only if it succeeds.  It returns
-a new frozen state; an exception leaves the previous state unchanged.  Coil
-degrees of freedom and optimizer rollback remain with the calling ESSOS driver,
-while production retracing and both acceptance decisions remain with PyNA.
+After an inner solve, `accept_manifold_continuation_stage` calls the branch and
+sample target refresh and advances to the next stage only if it succeeds.  If
+the continuation carries a strike target, an independently accepted strike
+snapshot is mandatory and must preserve its label, metric, and physical target.
+The function returns a new frozen state; an exception leaves the previous state
+unchanged.  Coil degrees of freedom and optimizer rollback remain with the
+calling ESSOS driver, while production retracing and acceptance decisions
+remain with PyNA.
 
 ## Candidate validation transaction
 
@@ -162,8 +169,10 @@ step boundary.  Given a trial ESSOS field and an explicit production grid, it:
    orders under anchor and tangent trust limits;
 3. traces the candidate branch directly through the live ESSOS field with JAX;
 4. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
-   target label under its sample-displacement limit; and
-5. returns a new continuation state only when every gate accepts.
+   sample label under its displacement limit;
+5. when a strike target is active, runs the global Cyna wall trace, exact strike
+   refresh, local-plane rebuild, and metric-specific JAX/Cyna strike gate; and
+6. returns a new continuation state only when every required gate accepts.
 
 The returned `ManifoldContinuationValidationReport` retains the individual
 PyNA reports and a stable rejection reason.  A rejected report contains no

@@ -21,6 +21,10 @@ from essos.manifold_optimization import (
     accept_manifold_continuation_stage,
     trace_manifold_reference,
 )
+from essos.manifold_strike_validation import (
+    ManifoldStrikeValidationConfig,
+    validate_manifold_strike_candidate,
+)
 
 
 def _pyna_validation_api():
@@ -53,6 +57,7 @@ class ManifoldContinuationValidationReport:
     accepted_state: ManifoldContinuationState | None
     accepted: bool
     rejection_reason: str | None = None
+    strike_validation: Any | None = None
     diagnostics: Mapping[str, object] = dataclass_field(
         default_factory=dict,
         compare=False,
@@ -77,6 +82,16 @@ class ManifoldContinuationValidationReport:
             ):
                 raise ValueError(
                     "an accepted validation requires all gates and a next state"
+                )
+            if (
+                self.accepted_state.strike_target_state is not None
+                and (
+                    self.strike_validation is None
+                    or not bool(getattr(self.strike_validation, "accepted", False))
+                )
+            ):
+                raise ValueError(
+                    "an accepted strike-aware validation requires its strike gate"
                 )
         else:
             if reason is None:
@@ -122,6 +137,7 @@ def validate_manifold_continuation_candidate(
     refine_stable_inverse_anchor: bool | None = None,
     extend_phi: bool = True,
     n_threads: int = -1,
+    strike_validation_config: ManifoldStrikeValidationConfig | None = None,
 ) -> ManifoldContinuationValidationReport:
     """Validate a trial field and advance only after all PyNA gates pass.
 
@@ -133,6 +149,13 @@ def validate_manifold_continuation_candidate(
 
     if not isinstance(continuation_state, ManifoldContinuationState):
         raise TypeError("continuation_state must be ManifoldContinuationState")
+    if continuation_state.strike_target_state is None:
+        if strike_validation_config is not None:
+            raise ValueError("strike_validation_config requires an active strike target")
+    elif not isinstance(strike_validation_config, ManifoldStrikeValidationConfig):
+        raise TypeError(
+            "an active strike target requires ManifoldStrikeValidationConfig"
+        )
     (
         production_refresh_function,
         compare_jax_manifold_branch,
@@ -239,11 +262,48 @@ def validate_manifold_continuation_candidate(
             },
         )
 
+    strike_validation = None
+    accepted_strike_target = None
+    if continuation_state.strike_target_state is not None:
+        config = strike_validation_config
+        strike_validation = validate_manifold_strike_candidate(
+            candidate_field,
+            production_field,
+            candidate_branch,
+            continuation_state.strike_target_state,
+            config.wall,
+            maximum_hit_displacement_m=config.maximum_hit_displacement_m,
+            maximum_projection_distance_m=(
+                config.maximum_projection_distance_m
+            ),
+            jax_cyna_tolerance_m=config.jax_cyna_tolerance_m,
+            max_turns=config.max_turns,
+            production_DPhi=config.production_DPhi,
+            production_trace_function=config.production_trace_function,
+            extend_phi=config.extend_phi,
+        )
+        if not strike_validation.accepted:
+            return ManifoldContinuationValidationReport(
+                production_refresh=production_refresh,
+                correspondence=correspondence,
+                sample_refresh=sample_refresh,
+                accepted_state=None,
+                accepted=False,
+                rejection_reason=(
+                    "strike_validation:"
+                    f"{strike_validation.rejection_reason or 'unknown'}"
+                ),
+                strike_validation=strike_validation,
+                diagnostics=strike_validation.diagnostics,
+            )
+        accepted_strike_target = strike_validation.accepted_target
+
     accepted_state = accept_manifold_continuation_stage(
         continuation_state,
         candidate_branch,
         sample_refresh,
         correspondence,
+        accepted_strike_target=accepted_strike_target,
     )
     return ManifoldContinuationValidationReport(
         production_refresh=production_refresh,
@@ -251,10 +311,23 @@ def validate_manifold_continuation_candidate(
         sample_refresh=sample_refresh,
         accepted_state=accepted_state,
         accepted=True,
+        strike_validation=strike_validation,
         diagnostics={
             "anchor_displacement_m": production_refresh.anchor_displacement_m,
             "sample_displacement_m": sample_refresh.sample_displacement_m,
             "max_jax_cyna_deviation_m": correspondence.max_deviation_m,
+            **(
+                {}
+                if strike_validation is None
+                else {
+                    "strike_displacement_m": (
+                        strike_validation.strike_refresh.hit_displacement_m
+                    ),
+                    "jax_cyna_strike_deviation_m": (
+                        strike_validation.correspondence.deviation_m
+                    ),
+                }
+            ),
         },
     )
 

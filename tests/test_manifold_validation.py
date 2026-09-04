@@ -15,8 +15,14 @@ from pyna.topo.manifold_correspondence import (
     ManifoldSampleMatch,
     manifold_branch_reference_from_trace,
 )
+from pyna.topo.manifold_strike_contracts import (
+    LocalWallPlane,
+    ManifoldStrikeLabel,
+    ManifoldStrikeMatch,
+)
 from pyna.topo.toroidal import FixedPoint
 from pyna.toroidal.flt import trace_fixed_point_manifolds_field
+from pyna.toroidal.geometry import ToroidalWall
 
 from essos.manifold import essos_field_to_pyna_cylindrical_grid
 from essos.manifold_driver import validated_manifold_backtracking_step
@@ -29,6 +35,8 @@ from essos.manifold_optimization import (
 from essos.manifold_validation import (
     validate_manifold_continuation_candidate,
 )
+from essos.manifold_strike_optimization import ManifoldStrikeStage2Target
+from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
 
 
 RATE = 0.35
@@ -152,6 +160,111 @@ def _continuation_state(*, generation_index=N_GENERATIONS):
     return ManifoldContinuationState(schedule, target)
 
 
+def _strike_wall(n_phi=8, n_pol=64):
+    phi = np.linspace(0.0, 2.0 * np.pi, n_phi, endpoint=False)
+    theta = np.linspace(0.0, 2.0 * np.pi, n_pol, endpoint=False)
+    R = np.broadcast_to(1.0 + 0.02 * np.cos(theta), (n_phi, n_pol)).copy()
+    Z = np.broadcast_to(0.02 * np.sin(theta), (n_phi, n_pol)).copy()
+    return ToroidalWall(phi, R, Z)
+
+
+def _strike_target(branch):
+    seed_index = branch.seed_index(7)
+    direction_sign = float(np.sign(branch.direction_RZ[0]))
+    hit_R = 1.0 + direction_sign * 0.02
+    seed_R = branch.anchor_RZ_m[0] + (
+        branch.seed_side
+        * branch.seed_distances_m[seed_index]
+        * branch.direction_RZ[0]
+    )
+    hit_phi = branch.section_phi + np.log(
+        (hit_R - branch.anchor_RZ_m[0])
+        / (seed_R - branch.anchor_RZ_m[0])
+    ) / RATE
+    label = ManifoldStrikeLabel(branch.label, "+", 7)
+    match = ManifoldStrikeMatch(
+        label=label,
+        point_RZPhi_m_rad=np.array([hit_R, 0.0, hit_phi]),
+        target_distance_m=0.0,
+        connection_length_m=abs(hit_R * (hit_phi - branch.section_phi)),
+        bundle_seed_index=seed_index,
+        distance_mode="rz",
+    )
+    plane = LocalWallPlane(
+        strike_label=label,
+        point_xyz_m=np.array(
+            [hit_R * np.cos(hit_phi), hit_R * np.sin(hit_phi), 0.0]
+        ),
+        normal_xyz=direction_sign
+        * np.array([np.cos(hit_phi), np.sin(hit_phi), 0.0]),
+        wall_phi_rad=hit_phi,
+        wall_s=0.0 if direction_sign > 0.0 else 0.5,
+        projection_distance_m=0.0,
+    )
+    return ManifoldStrikeStage2Target(
+        branch_reference=branch,
+        strike_match=match,
+        wall_plane=plane,
+        target_position_m=np.array([hit_R, 0.0]),
+        position_scales_m=np.array([0.01, 0.01]),
+        maximum_phi_shift=0.2,
+        n_steps_per_span=N_STEPS_PER_SPAN,
+        xline_newton_iterations=4,
+        wall_n_steps=512,
+        wall_newton_iterations=6,
+    )
+
+
+def _analytic_strike_trace(parameters, hit_R):
+    rate, center_r, _center_z = map(float, parameters)
+
+    def trace(
+        field,
+        R,
+        Z,
+        phi_start,
+        max_turns,
+        DPhi,
+        wall_phi,
+        wall_R,
+        wall_Z,
+        *,
+        extend_phi,
+        direction,
+    ):
+        del field, max_turns, DPhi, wall_phi, wall_R, wall_Z, extend_phi
+        assert direction == "+"
+        phi = phi_start + np.log(
+            (hit_R - center_r) / (R - center_r)
+        ) / rate
+        return {
+            "Lc_plus": np.abs(hit_R * (phi - phi_start)),
+            "hit_plus": np.column_stack((np.full(R.size, hit_R), Z, phi)),
+            "term_plus": np.ones(R.size, dtype=int),
+        }
+
+    return trace
+
+
+def _strike_continuation_state():
+    state = _continuation_state()
+    schedule = ManifoldContinuationSchedule(
+        (
+            ManifoldContinuationStage(name="base"),
+            ManifoldContinuationStage(
+                name="manifold-strike",
+                manifold_weight=0.1,
+                strike_weight=0.2,
+            ),
+        )
+    )
+    return ManifoldContinuationState(
+        schedule,
+        state.target_state,
+        strike_target_state=_strike_target(state.target_state.branch_reference),
+    )
+
+
 def _validate(candidate_field, state, **overrides):
     options = {
         "maximum_anchor_displacement_m": 2.0e-3,
@@ -189,6 +302,50 @@ def test_candidate_validation_advances_after_all_three_pyna_gates():
     assert report.candidate_branch.origin_label == "21:P0"
     np.testing.assert_array_equal(report.candidate_branch.seed_orders, SEED_ORDERS)
     assert state.stage_index == 0
+
+
+def test_candidate_validation_advances_strike_state_only_after_its_gates():
+    _require_cyna()
+    pytest.importorskip("joblib")
+    state = _strike_continuation_state()
+    candidate_parameters = np.array([0.36, 1.0003, 0.0])
+    candidate = _ShiftedHyperbolicField(jnp.asarray(candidate_parameters))
+    hit_R = state.strike_target_state.target_position_m[0]
+    strike_config = ManifoldStrikeValidationConfig(
+        wall=_strike_wall(),
+        maximum_hit_displacement_m=2.0e-3,
+        maximum_projection_distance_m=2.0e-4,
+        jax_cyna_tolerance_m=2.0e-8,
+        max_turns=4,
+        production_DPhi=0.01,
+        production_trace_function=_analytic_strike_trace(
+            candidate_parameters,
+            hit_R,
+        ),
+    )
+
+    with pytest.raises(TypeError, match="requires ManifoldStrikeValidationConfig"):
+        _validate(candidate, state)
+    report = _validate(
+        candidate,
+        state,
+        strike_validation_config=strike_config,
+    )
+
+    assert report.accepted
+    assert report.strike_validation.accepted
+    assert report.accepted_state is not None
+    assert report.accepted_state.stage_index == 1
+    assert report.accepted_state.strike_target_state is not None
+    assert (
+        report.accepted_state.strike_target_state.label
+        == state.strike_target_state.label
+    )
+    assert (
+        report.accepted_state.strike_target_state.strike_match
+        is report.strike_validation.strike_refresh.candidate_match
+    )
+    assert report.diagnostics["jax_cyna_strike_deviation_m"] < 2.0e-8
 
 
 def test_candidate_validation_stops_after_production_anchor_rejection():
