@@ -51,6 +51,20 @@ labelled return-map problem, not that they must execute concurrently.  JAX can
 itself run on CUDA when a CUDA-enabled JAX runtime is installed; Cyna retains
 its CPU/CUDA production role for high-throughput and wall-aware tracing.
 
+`essos_field_to_pyna_cylindrical_grid` closes the production side of this
+split.  At an outer validation point it evaluates the current ESSOS field in
+bounded JAX batches, converts Cartesian components to PyNA's canonical
+`(BR, BZ, BPhi)` order, and materializes a host-side `VectorFieldCylind`
+snapshot for Cyna.  This conversion is intentionally non-differentiable.  The
+live ESSOS field continues through the JAX path for gradients; the grid
+snapshot is used only for topology discovery, wall-aware tracing, and parity
+checks.
+
+The caller must choose an `(R, Z, Phi)` grid that encloses every candidate
+orbit and manifold segment, covers one endpoint-free field period for the
+declared `nfp`, and is converged in spatial resolution.  Leaving the grid is a
+failed outer validation, not permission to extrapolate a topology label.
+
 ESSOS does not reproduce PyNA's eigensystem or seed-spacing theory.  An outer
 PyNA topology refresh selects the orbit, stability, branch side, consistently
 oriented eigendirection, geometric seed distances, and sample correspondence.

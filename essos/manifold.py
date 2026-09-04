@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from essos.fields import BiotSavart
 
@@ -29,6 +30,145 @@ def essos_field_callable(xyz: Any, field: Any) -> Any:
     """
 
     return field.B(xyz)
+
+
+@jax.jit
+def _batched_essos_field_callable(xyz_batch: Any, field: Any) -> Any:
+    return jax.vmap(lambda xyz: essos_field_callable(xyz, field))(xyz_batch)
+
+
+def _pyna_cylindrical_field_class():
+    try:
+        from pyna.fields import VectorFieldCylind
+    except ImportError as exc:  # pragma: no cover - depends on installation
+        raise ImportError(
+            "ESSOS production manifold validation requires PyNA"
+        ) from exc
+    return VectorFieldCylind
+
+
+def _sampling_axis(
+    values: Any,
+    name: str,
+    *,
+    minimum_size: int,
+) -> np.ndarray:
+    axis = np.asarray(values, dtype=float)
+    if axis.ndim != 1 or axis.size < minimum_size:
+        raise ValueError(
+            f"{name} must be a one-dimensional array with at least "
+            f"{minimum_size} point(s)"
+        )
+    if not np.all(np.isfinite(axis)):
+        raise ValueError(f"{name} must contain only finite values")
+    if axis.size > 1 and np.any(np.diff(axis) <= 0.0):
+        raise ValueError(f"{name} must be strictly increasing")
+    return np.ascontiguousarray(axis)
+
+
+def _positive_integer(value: Any, name: str) -> int:
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{name} must be an integer")
+    try:
+        result = operator.index(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be an integer") from exc
+    if result <= 0:
+        raise ValueError(f"{name} must be positive")
+    return result
+
+
+def essos_field_to_pyna_cylindrical_grid(
+    field: Any,
+    R: Any,
+    Z: Any,
+    Phi: Any,
+    *,
+    nfp: int = 1,
+    batch_size: int = 4096,
+    axisymmetric: bool = False,
+    name: str = "ESSOS magnetic field",
+) -> Any:
+    """Sample an ESSOS field into PyNA's production cylindrical field type.
+
+    This is an outer-loop snapshot for PyNA/Cyna tracing, not a differentiable
+    inner-loop operation.  ESSOS evaluates its Cartesian field in bounded JAX
+    batches, converts ``(Bx, By, Bz)`` to ``(BR, BZ, BPhi)``, and hands the
+    resulting host arrays to PyNA.  ``Phi`` should normally be a uniform
+    endpoint-free grid covering one field period, ``2*pi/nfp``.
+    """
+
+    if not hasattr(field, "B"):
+        raise TypeError("field must provide B(xyz) in Cartesian coordinates")
+    VectorFieldCylind = _pyna_cylindrical_field_class()
+    radial_axis = _sampling_axis(R, "R", minimum_size=2)
+    vertical_axis = _sampling_axis(Z, "Z", minimum_size=2)
+    toroidal_axis = _sampling_axis(Phi, "Phi", minimum_size=1)
+    if np.any(radial_axis <= 0.0):
+        raise ValueError("R must contain only positive cylindrical radii")
+    periods = _positive_integer(nfp, "nfp")
+    chunk_size = _positive_integer(batch_size, "batch_size")
+
+    radius, vertical, phi = np.meshgrid(
+        radial_axis,
+        vertical_axis,
+        toroidal_axis,
+        indexing="ij",
+    )
+    xyz = np.stack(
+        (
+            radius * np.cos(phi),
+            radius * np.sin(phi),
+            vertical,
+        ),
+        axis=-1,
+    ).reshape(-1, 3)
+    effective_chunk_size = min(chunk_size, xyz.shape[0])
+    cartesian = np.empty_like(xyz)
+    for start in range(0, xyz.shape[0], effective_chunk_size):
+        stop = min(start + effective_chunk_size, xyz.shape[0])
+        batch = xyz[start:stop]
+        if batch.shape[0] < effective_chunk_size:
+            padding = np.repeat(
+                batch[-1:],
+                effective_chunk_size - batch.shape[0],
+                axis=0,
+            )
+            batch = np.concatenate((batch, padding), axis=0)
+        sampled = np.asarray(
+            jax.device_get(
+                _batched_essos_field_callable(jnp.asarray(batch), field)
+            ),
+            dtype=float,
+        )
+        if sampled.shape != (effective_chunk_size, 3):
+            raise ValueError("field.B must return one Cartesian 3-vector per point")
+        cartesian[start:stop] = sampled[: stop - start]
+    if not np.all(np.isfinite(cartesian)):
+        raise ValueError("ESSOS field sampling produced non-finite values")
+
+    flat_phi = phi.ravel()
+    cos_phi = np.cos(flat_phi)
+    sin_phi = np.sin(flat_phi)
+    bx = cartesian[:, 0]
+    by = cartesian[:, 1]
+    shape = radius.shape
+    b_r = (bx * cos_phi + by * sin_phi).reshape(shape)
+    b_z = cartesian[:, 2].reshape(shape)
+    b_phi = (-bx * sin_phi + by * cos_phi).reshape(shape)
+
+    return VectorFieldCylind(
+        radial_axis,
+        vertical_axis,
+        toroidal_axis,
+        BR=b_r,
+        BZ=b_z,
+        BPhi=b_phi,
+        nfp=periods,
+        name=str(name),
+        units="T",
+        axisymmetric=bool(axisymmetric),
+    )
 
 
 def biot_savart_field_callable(xyz: Any, coils: Any) -> Any:
@@ -503,6 +643,7 @@ def return_map_surface_loss(
 __all__ = [
     "ManifoldBranchTrace",
     "biot_savart_field_callable",
+    "essos_field_to_pyna_cylindrical_grid",
     "essos_field_callable",
     "fixed_phi_poincare_map",
     "fixed_phi_poincare_map_from_coils",
