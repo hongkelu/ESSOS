@@ -19,6 +19,12 @@ The intended Stage-2 sequence is:
    using the production PyNA/Cyna tracing path.
 
 The first adapter is intentionally limited to the field and return-map
-boundary.  Periodic-orbit state, manifold branches, wall strikes, and heat-load
-losses will be added as separate milestones after map and gradient parity have
-been established.
+boundary.  The first Stage-2 objective is `return_map_surface_loss`, which maps
+fixed Stage-1 edge seeds with PyNA and penalizes their squared signed distance
+from an ESSOS-supplied target surface on the destination section.  It composes
+directly with `custom_loss`, so it can be ramped alongside normal-field and
+engineering terms.
+
+Periodic-orbit state, manifold branches, wall strikes, and heat-load losses
+will be added as separate milestones after this return-map objective is
+validated in a constrained coil optimization.
