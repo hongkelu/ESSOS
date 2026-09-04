@@ -255,12 +255,23 @@ flight angle is essential: folding it into one field period would send the JAX
 event solver down the wrong trajectory segment.  With the corrected contract,
 the local event is strongly transverse and the full Cartesian JAX/Cyna strike
 discrepancy is about `0.77 mm`, inside the explicit `1.5 mm` gate.  The JAX
-derivative of `(X,Y,Z)` with respect to trim-coil current also agrees with a
-centered finite difference to `3e-5` relative tolerance.
+derivative of `(X,Y,Z)` with respect to a symmetry-preserving modular-coil
+Fourier deformation also agrees with a centered finite difference to `3e-5`
+relative tolerance.
+
+The checkpoint then turns that derivative into a bounded shape solve.  A known
+`10 micrometre` change to the first base coil's vertical sine coefficient
+defines the Cartesian strike target.  One scalar Gauss--Newton proposal
+recovers the coefficient within `5 nanometres`, reduces the normalized strike
+loss by more than six orders of magnitude, and changes the affected physical
+coil lengths by only about `31 micrometres`.  The full proposal passes the
+production X-line, direction, manifold-sample, exact strike-label, local wall,
+and JAX/Cyna correspondence gates without backtracking.
 
 This closes the first physical QA coil/wall and three-dimensional strike
-checkpoint.  Wall loading and clearance objectives, a QA coil-shape solve, and
-multi-DOF engineering-constrained optimization remain subsequent milestones.
+checkpoint, including a true QA modular-coil shape step.  Wall loading and
+clearance objectives and multi-DOF engineering-constrained optimization remain
+subsequent milestones.
 
 ## Optimizer proposal rollback
 

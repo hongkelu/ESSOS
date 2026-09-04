@@ -9,6 +9,7 @@ notch to a labelled unstable branch.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,7 @@ pytest.importorskip("pyna.topo.jax_manifold")
 pytest.importorskip("pyna.topo.jax_strike")
 
 from pyna.topo.manifold_correspondence import (
+    ManifoldSampleMatch,
     compare_jax_manifold_branch,
     manifold_branch_reference_from_trace,
 )
@@ -45,16 +47,26 @@ from pyna.toroidal.geometry import ToroidalWall
 
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
+from essos.manifold_driver import validated_manifold_backtracking_step
 from essos.manifold import (
     essos_field_to_pyna_cylindrical_grid,
     fixed_phi_poincare_map_from_coils,
     periodic_xline_state,
 )
-from essos.manifold_optimization import trace_manifold_reference
+from essos.manifold_optimization import (
+    ManifoldContinuationSchedule,
+    ManifoldContinuationStage,
+    ManifoldContinuationState,
+    ManifoldStage2Target,
+    trace_manifold_reference,
+)
 from essos.manifold_strike_optimization import (
     ManifoldStrikeStage2Target,
+    manifold_strike_stage2_target_loss,
     trace_manifold_strike_reference,
 )
+from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
+from essos.manifold_validation import validate_manifold_continuation_candidate
 
 
 QA_NFP = 2
@@ -83,6 +95,9 @@ _QA_INPUT = Path(__file__).parents[1] / (
 )
 _QA_SOURCE_COILS = Coils.from_json(str(_QA_INPUT))
 _QA_SOURCE_CURRENTS = _QA_SOURCE_COILS.currents
+_QA_BASE_DOFS = _QA_SOURCE_COILS.curves.dofs
+QA_SHAPE_DOF_INDEX = (0, 2, 1)
+QA_SHAPE_DOF_NOMINAL = float(_QA_BASE_DOFS[QA_SHAPE_DOF_INDEX])
 _QA_TRIM_DOFS = jnp.stack(
     [
         _vertical_tf_trim_dofs(2.0 * jnp.pi * index / QA_N_TF_TRIM)
@@ -111,6 +126,33 @@ def _qa_coils(trim_current_kA):
 
 def _qa_field(trim_current_kA=QA_TRIM_CURRENT_KA):
     return BiotSavart(_qa_coils(trim_current_kA))
+
+
+def _qa_shape_field(shape_dof):
+    base_dofs = _QA_BASE_DOFS.at[QA_SHAPE_DOF_INDEX].set(shape_dof)
+    symmetric_qa_curves = Curves(
+        base_dofs,
+        n_segments=_QA_SOURCE_COILS.n_segments,
+        nfp=QA_NFP,
+        stellsym=True,
+    )
+    curves = Curves(
+        jnp.concatenate((symmetric_qa_curves.curves, _QA_TRIM_DOFS)),
+        n_segments=_QA_SOURCE_COILS.n_segments,
+        nfp=1,
+        stellsym=False,
+    )
+    currents = jnp.concatenate(
+        (
+            _QA_SOURCE_CURRENTS,
+            1000.0
+            * QA_TRIM_CURRENT_KA
+            * jnp.ones(QA_N_TF_TRIM),
+        )
+    )
+    return BiotSavart(
+        Coils(curves, currents, currents_scale=1.0e5)
+    )
 
 
 def _require_cyna():
@@ -425,23 +467,175 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     assert abs(float(live_strike.intersection.transversality)) > 1.0
     assert abs(float(live_strike.intersection.phi_shift_from_guess)) < 1.0e-3
 
-    def hit_xyz(trim_current_kA):
+    desired_shape_dof = QA_SHAPE_DOF_NOMINAL + 1.0e-5
+    desired_trace = trace_manifold_strike_reference(
+        _qa_shape_field(desired_shape_dof),
+        target,
+    )
+    assert bool(desired_trace.periodic_point.converged)
+    assert bool(desired_trace.intersection.converged)
+    shape_target = replace(
+        target,
+        target_position_m=np.asarray(desired_trace.intersection.point_xyz),
+        position_scales_m=np.full(3, 1.0e-4),
+    )
+
+    sample_label = branch.sample_label(branch.n_generations, 0)
+    sample_match = ManifoldSampleMatch(
+        label=sample_label,
+        point_RZ_m=branch.point(sample_label),
+        distance_m=0.0,
+        jax_seed_index=branch.seed_index(sample_label.seed_order),
+    )
+    sample_target = ManifoldStage2Target(
+        branch_reference=branch,
+        sample_match=sample_match,
+        target_RZ_m=sample_match.point_RZ_m,
+        rz_scales_m=np.full(2, 1.0e-3),
+        n_steps_per_span=640,
+        newton_iterations=8,
+        newton_damping=0.8,
+        bphi_floor=1.0e-10,
+    )
+    continuation = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(name="base"),
+                ManifoldContinuationStage(
+                    name="strike",
+                    strike_weight=1.0,
+                ),
+            )
+        ),
+        sample_target,
+        stage_index=1,
+        strike_target_state=shape_target,
+    )
+    strike_config = ManifoldStrikeValidationConfig(
+        wall=wall,
+        maximum_hit_displacement_m=2.0e-3,
+        maximum_projection_distance_m=4.0e-3,
+        jax_cyna_tolerance_m=1.5e-3,
+        max_turns=3,
+        production_DPhi=QA_WALL_DPHI,
+    )
+
+    def shape_hit(shape_dof):
         return trace_manifold_strike_reference(
-            _qa_field(trim_current_kA),
-            target,
+            _qa_shape_field(shape_dof),
+            shape_target,
         ).intersection.point_xyz
 
-    trim_current = jnp.asarray(QA_TRIM_CURRENT_KA)
-    gradient = jax.jacfwd(hit_xyz)(trim_current)
-    delta = 1.0e-6
+    initial_shape_dof = jnp.asarray(QA_SHAPE_DOF_NOMINAL)
+    initial_endpoint = shape_hit(initial_shape_dof)
+    normalized_residual = (
+        initial_endpoint - shape_target.target_position_m
+    ) / shape_target.position_scales_m
+    normalized_jacobian = (
+        jax.jacfwd(shape_hit)(initial_shape_dof)
+        / shape_target.position_scales_m
+    )
+    gauss_newton_step = -jnp.vdot(
+        normalized_jacobian,
+        normalized_residual,
+    ) / jnp.vdot(normalized_jacobian, normalized_jacobian)
+    proposed_shape_dof = np.clip(
+        float(initial_shape_dof + gauss_newton_step),
+        QA_SHAPE_DOF_NOMINAL - 2.0e-5,
+        QA_SHAPE_DOF_NOMINAL + 2.0e-5,
+    )
+
+    finite_difference_delta = 1.0e-7
     finite_difference = (
-        hit_xyz(trim_current + delta) - hit_xyz(trim_current - delta)
-    ) / (2.0 * delta)
-    assert bool(jnp.all(jnp.isfinite(gradient)))
-    assert float(jnp.linalg.norm(gradient)) > 0.5
+        shape_hit(initial_shape_dof + finite_difference_delta)
+        - shape_hit(initial_shape_dof - finite_difference_delta)
+    ) / (2.0 * finite_difference_delta)
     np.testing.assert_allclose(
-        gradient,
+        normalized_jacobian * shape_target.position_scales_m,
         finite_difference,
         rtol=3.0e-5,
-        atol=1.0e-6,
+        atol=2.0e-6,
+    )
+
+    def validate_shape_candidate(candidate_field, state):
+        return validate_manifold_continuation_candidate(
+            candidate_field,
+            state,
+            QA_R_GRID,
+            QA_Z_GRID,
+            QA_PHI_GRID,
+            nfp=QA_NFP,
+            sampling_batch_size=1024,
+            maximum_anchor_displacement_m=1.0e-3,
+            minimum_direction_alignment=0.99,
+            maximum_sample_displacement_m=2.0e-3,
+            jax_cyna_tolerance_m=3.0e-4,
+            production_DPhi=QA_PRODUCTION_DPHI,
+            production_fd_eps=1.0e-5,
+            fixed_point_max_iter=120,
+            fixed_point_tolerance=1.0e-12,
+            fixed_point_residual_tolerance=1.0e-8,
+            require_complete_correspondence=True,
+            RZlimit=(
+                QA_R_GRID[0],
+                QA_R_GRID[-1],
+                QA_Z_GRID[0],
+                QA_Z_GRID[-1],
+            ),
+            refine_stable_inverse_anchor=False,
+            n_threads=1,
+            strike_validation_config=strike_config,
+        )
+
+    initial_loss = manifold_strike_stage2_target_loss(
+        _qa_shape_field(initial_shape_dof),
+        target_state=shape_target,
+    )
+    result = validated_manifold_backtracking_step(
+        np.array([QA_SHAPE_DOF_NOMINAL]),
+        np.array([proposed_shape_dof]),
+        lambda dofs: _qa_shape_field(dofs[0]),
+        continuation,
+        validate_shape_candidate,
+        contraction=0.5,
+        maximum_attempts=4,
+    )
+    final_loss = manifold_strike_stage2_target_loss(
+        result.field,
+        target_state=shape_target,
+    )
+    nominal_lengths = np.asarray(
+        _qa_shape_field(QA_SHAPE_DOF_NOMINAL).coils.length
+    )
+    final_lengths = np.asarray(result.field.coils.length)
+    maximum_length_change = float(
+        np.max(np.abs(final_lengths - nominal_lengths))
+    )
+
+    assert result.accepted
+    assert result.step_fraction == 1.0
+    assert abs(result.dofs[0] - desired_shape_dof) < 1.0e-8
+    assert float(final_loss) < 1.0e-5 * float(initial_loss)
+    assert 2.0e-5 < maximum_length_change < 4.0e-5
+    accepted = result.attempts[-1].validation
+    assert accepted.production_refresh.anchor_displacement_m < 6.0e-4
+    assert accepted.correspondence.max_deviation_m < 1.0e-4
+    assert accepted.sample_refresh.sample_displacement_m < 1.0e-3
+    assert accepted.strike_validation.accepted
+    assert (
+        accepted.strike_validation.strike_refresh.hit_displacement_m
+        < 6.0e-4
+    )
+    assert accepted.strike_validation.correspondence.deviation_m < 1.0e-3
+    assert (
+        accepted.strike_validation.wall_plane.projection_distance_m
+        < 4.0e-3
+    )
+    assert (
+        result.continuation_state.strike_target_state.label
+        == shape_target.label
+    )
+    np.testing.assert_allclose(
+        result.continuation_state.strike_target_state.target_position_m,
+        shape_target.target_position_m,
     )
