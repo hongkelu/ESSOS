@@ -60,6 +60,7 @@ TF_RADIUS = 0.9
 TF_CURRENT = -8.0e5
 PLASMA_CURRENT = 1.0e6
 PF_CURRENT = 1.0e6
+PF_HEIGHT = -1.2
 MAP_SPAN = 2.0 * jnp.pi / N_TF
 INITIAL_GUESS = jnp.array([1.48, -0.092])
 PRODUCTION_R = np.linspace(0.8, 2.4, 49)
@@ -89,7 +90,7 @@ COIL_DOFS = jnp.stack(
     ]
     + [
         _horizontal_loop_dofs(1.0, 0.0),
-        _horizontal_loop_dofs(3.0, -1.2),
+        _horizontal_loop_dofs(3.0, PF_HEIGHT),
     ]
 )
 CURVES = Curves(
@@ -108,6 +109,25 @@ def _physical_field(pf_control):
         )
     )
     return BiotSavart(Coils(CURVES, currents, currents_scale=PF_CURRENT))
+
+
+def _physical_field_with_pf_height(pf_height):
+    curve_dofs = COIL_DOFS.at[-1, 2, 0].set(pf_height)
+    curves = Curves(
+        curve_dofs,
+        n_segments=N_SEGMENTS,
+        nfp=1,
+        stellsym=False,
+    )
+    currents = jnp.concatenate(
+        (
+            TF_CURRENT * jnp.ones(N_TF),
+            jnp.array([PLASMA_CURRENT, PF_CURRENT]),
+        )
+    )
+    return BiotSavart(
+        Coils(curves, currents, currents_scale=PF_CURRENT)
+    )
 
 
 def _require_cyna():
@@ -286,6 +306,54 @@ def _tokamak_continuation_state(
         target,
         stage_index=stage_index,
     )
+
+
+def _tokamak_strike_problem(nominal_field, desired_field):
+    production_field = _tokamak_production_field(nominal_field)
+    branch = _tokamak_production_branch(
+        nominal_field,
+        production_field=production_field,
+        seed_distances=(1.0e-2,),
+        seed_orders=(11,),
+        n_generations=1,
+    )
+    wall = _tokamak_wall()
+    initial_strike_target = _tokamak_strike_target(
+        branch,
+        production_field,
+        wall,
+    )
+    desired_trace = trace_manifold_strike_reference(
+        desired_field,
+        initial_strike_target,
+    )
+    strike_target = replace(
+        initial_strike_target,
+        target_position_m=np.asarray(
+            desired_trace.intersection.point_RZPhi[:2]
+        ),
+    )
+    sample_state = _tokamak_continuation_state(branch, stage_index=1)
+    continuation = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(name="base"),
+                ManifoldContinuationStage(name="strike", strike_weight=1.0),
+            )
+        ),
+        sample_state.target_state,
+        stage_index=1,
+        strike_target_state=strike_target,
+    )
+    strike_config = ManifoldStrikeValidationConfig(
+        wall=wall,
+        maximum_hit_displacement_m=2.0e-3,
+        maximum_projection_distance_m=1.0e-4,
+        jax_cyna_tolerance_m=5.0e-4,
+        max_turns=20,
+        production_DPhi=float(MAP_SPAN) / 128,
+    )
+    return continuation, strike_target, strike_config
 
 
 def _validate_tokamak_candidate(
@@ -513,57 +581,13 @@ def test_bounded_pf_current_step_reaches_a_manifold_target():
 def test_bounded_pf_current_step_reaches_a_first_wall_strike():
     _require_cyna()
     pytest.importorskip("joblib")
-    nominal_field = _physical_field(1.0)
-    production_field = _tokamak_production_field(nominal_field)
-    branch = _tokamak_production_branch(
-        nominal_field,
-        production_field=production_field,
-        seed_distances=(1.0e-2,),
-        seed_orders=(11,),
-        n_generations=1,
-    )
-    wall = _tokamak_wall()
-    initial_strike_target = _tokamak_strike_target(
-        branch,
-        production_field,
-        wall,
-    )
     desired_control = 1.0002
-    desired_trace = trace_manifold_strike_reference(
+    nominal_field = _physical_field(1.0)
+    continuation, strike_target, strike_config = _tokamak_strike_problem(
+        nominal_field,
         _physical_field(desired_control),
-        initial_strike_target,
     )
-    target_RZ_m = np.asarray(desired_trace.intersection.point_RZPhi[:2])
-    strike_target = replace(
-        initial_strike_target,
-        target_position_m=target_RZ_m,
-    )
-
-    sample_state = _tokamak_continuation_state(
-        branch,
-        target_RZ_m=branch.point(branch.sample_label(1, 0)),
-        stage_index=1,
-    )
-    schedule = ManifoldContinuationSchedule(
-        (
-            ManifoldContinuationStage(name="base"),
-            ManifoldContinuationStage(name="strike", strike_weight=1.0),
-        )
-    )
-    continuation = ManifoldContinuationState(
-        schedule,
-        sample_state.target_state,
-        stage_index=1,
-        strike_target_state=strike_target,
-    )
-    strike_config = ManifoldStrikeValidationConfig(
-        wall=wall,
-        maximum_hit_displacement_m=2.0e-3,
-        maximum_projection_distance_m=1.0e-4,
-        jax_cyna_tolerance_m=5.0e-4,
-        max_turns=20,
-        production_DPhi=float(MAP_SPAN) / 128,
-    )
+    target_RZ_m = strike_target.target_position_m
 
     def endpoint(control):
         return trace_manifold_strike_reference(
@@ -625,3 +649,76 @@ def test_bounded_pf_current_step_reaches_a_first_wall_strike():
         == strike_target.label
     )
     assert result.continuation_state.strike_target_state.distance_mode == "rz"
+
+
+def test_bounded_pf_coil_height_step_reaches_a_first_wall_strike():
+    _require_cyna()
+    pytest.importorskip("joblib")
+    desired_height = PF_HEIGHT + 1.0e-3
+    nominal_field = _physical_field_with_pf_height(PF_HEIGHT)
+    continuation, strike_target, strike_config = _tokamak_strike_problem(
+        nominal_field,
+        _physical_field_with_pf_height(desired_height),
+    )
+    target_RZ_m = strike_target.target_position_m
+
+    def endpoint(pf_height):
+        return trace_manifold_strike_reference(
+            _physical_field_with_pf_height(pf_height),
+            strike_target,
+        ).intersection.point_RZPhi[:2]
+
+    initial_height = jnp.asarray(PF_HEIGHT)
+    initial_endpoint = endpoint(initial_height)
+    normalized_residual = (
+        initial_endpoint - target_RZ_m
+    ) / strike_target.position_scales_m
+    normalized_jacobian = (
+        jax.jacfwd(endpoint)(initial_height)
+        / strike_target.position_scales_m
+    )
+    gauss_newton_step = -jnp.vdot(
+        normalized_jacobian,
+        normalized_residual,
+    ) / jnp.vdot(normalized_jacobian, normalized_jacobian)
+    proposed_height = np.clip(
+        float(initial_height + gauss_newton_step),
+        PF_HEIGHT - 2.0e-3,
+        PF_HEIGHT + 2.0e-3,
+    )
+    initial_loss = manifold_strike_stage2_target_loss(
+        nominal_field,
+        target_state=strike_target,
+    )
+
+    result = validated_manifold_backtracking_step(
+        np.array([float(initial_height)]),
+        np.array([proposed_height]),
+        lambda dofs: _physical_field_with_pf_height(dofs[0]),
+        continuation,
+        lambda field, state: _validate_tokamak_candidate(
+            field,
+            state,
+            strike_validation_config=strike_config,
+        ),
+        contraction=0.5,
+        maximum_attempts=4,
+    )
+    final_loss = manifold_strike_stage2_target_loss(
+        result.field,
+        target_state=strike_target,
+    )
+
+    assert result.accepted
+    assert result.step_fraction == 1.0
+    assert abs(result.dofs[0] - desired_height) < 2.0e-6
+    assert float(final_loss) < 1.0e-5 * float(initial_loss)
+    accepted = result.attempts[-1].validation
+    assert accepted.strike_validation.accepted
+    assert accepted.production_refresh.anchor_displacement_m < 2.0e-3
+    assert accepted.strike_validation.correspondence.deviation_m < 5.0e-4
+    assert accepted.strike_validation.strike_refresh.hit_displacement_m < 2.0e-3
+    assert (
+        result.continuation_state.strike_target_state.label
+        == strike_target.label
+    )
