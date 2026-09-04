@@ -72,3 +72,28 @@ not yet an exact strike-point objective: wall intersection, branch relabelling,
 connection length, and heat-load evaluation remain PyNA/Cyna outer-loop
 milestones.  Accepted ESSOS steps must be re-traced there before their topology
 is trusted.
+
+## Immutable target state and accepted refreshes
+
+`ManifoldStage2Target` is the boundary between one outer topology refresh and
+one differentiable inner solve.  It stores the accepted PyNA production branch,
+one exact sample label, the physical target and normalization scales, and the
+JAX tracing resolution.  `make_manifold_stage2_loss` captures that state in an
+ESSOS `custom_loss`; it never searches for a closer sample or changes branch
+identity while the optimizer is differentiating.
+
+After a trial coil update, PyNA owns both acceptance gates:
+
+1. `compare_jax_manifold_branch` verifies that the differentiable JAX samples
+   still correspond to the production Cyna branch within the chosen tolerance.
+2. `refresh_manifold_sample_match` carries the exact
+   `(orbit, point, stability, initial side, generation, seed order)` label to
+   the candidate field and enforces its displacement trust limit.  It rejects
+   a missing sample instead of replacing it with a nearby one.
+
+Only when both reports accept does `refresh_manifold_stage2_target` create the
+next immutable snapshot.  The physical divertor target stays fixed; the branch
+reference and the position associated with its exact label advance to the
+accepted coil field.  A continuation driver should reject or shorten a trial
+step when either report fails, then begin the next inner solve from the last
+accepted snapshot.
