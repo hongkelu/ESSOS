@@ -154,3 +154,22 @@ its step or topology weight.  By default, Cyna branches may be incomplete
 because wall termination is physical; the selected label must still exist.
 Setting `require_complete_correspondence=True` is useful for domain-resolution
 tests where every requested generation is expected to remain inside the grid.
+
+## First tokamak coil checkpoint
+
+The integration suite includes an eight-period tokamak-like field assembled
+from discrete toroidal-field coils, an axisymmetric plasma-current loop, and a
+PF coil.  The direct ESSOS/JAX map finds a hyperbolic X-line and differentiates
+its unstable manifold with respect to the PF current.  The production path
+samples the same Biot--Savart field on a `49 x 49 x 12` one-period cylindrical
+grid, refines the grid field's own X-point with Cyna, and traces two manifold
+generations with sparse seed orders.
+
+Refining the production X-point is essential: seeding Cyna directly from the
+live-field JAX root can introduce millimetre-scale drift because the
+interpolated grid defines a slightly different discrete map.  With production
+refinement, the test uses a conservative `2e-4 m` JAX/Cyna correspondence gate.
+A small PF-current candidate remains within `2e-3 m` anchor and exact-sample
+trust limits and advances the continuation state.  This establishes a physical
+tokamak coil-to-topology loop; wall strike selection and a solved divertor
+target objective remain subsequent milestones.
