@@ -51,6 +51,7 @@ from essos.manifold_driver import validated_manifold_backtracking_step
 from essos.manifold import (
     essos_field_to_pyna_cylindrical_grid,
     fixed_phi_poincare_map_from_coils,
+    periodic_xline_clearance_loss,
     periodic_xline_state,
 )
 from essos.manifold_optimization import (
@@ -66,7 +67,10 @@ from essos.manifold_strike_optimization import (
     trace_manifold_strike_reference,
 )
 from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
-from essos.manifold_validation import validate_manifold_continuation_candidate
+from essos.manifold_validation import (
+    XLineClearanceValidationConfig,
+    validate_manifold_continuation_candidate,
+)
 
 
 QA_NFP = 2
@@ -297,6 +301,55 @@ def _qa_divertor_wall(production_field, production_xline):
     )
 
 
+def _qa_wall_radial_signed_distance(wall):
+    """Freeze the regression wall as a JAX periodic radial interpolant."""
+
+    center_R = 0.95
+    center_Z = 0.0
+    wall_radius = jnp.asarray(
+        np.hypot(np.asarray(wall.R) - center_R, np.asarray(wall.Z) - center_Z)
+    )
+    n_phi, n_theta = wall_radius.shape
+    phi0 = float(np.asarray(wall.phi)[0])
+
+    def signed_distance(point_xyz):
+        radius = jnp.hypot(point_xyz[0], point_xyz[1])
+        phi = jnp.arctan2(point_xyz[1], point_xyz[0])
+        radial_R = radius - center_R
+        radial_Z = point_xyz[2] - center_Z
+        rho = jnp.hypot(radial_R, radial_Z)
+        theta = jnp.mod(jnp.arctan2(radial_Z, radial_R), 2.0 * jnp.pi)
+
+        phi_coordinate = (
+            jnp.mod(phi - phi0, QA_FIELD_PERIOD)
+            * n_phi
+            / QA_FIELD_PERIOD
+        )
+        theta_coordinate = theta * n_theta / (2.0 * jnp.pi)
+        phi_lower = jnp.floor(phi_coordinate).astype(jnp.int32) % n_phi
+        theta_lower = jnp.floor(theta_coordinate).astype(jnp.int32) % n_theta
+        phi_upper = (phi_lower + 1) % n_phi
+        theta_upper = (theta_lower + 1) % n_theta
+        phi_fraction = phi_coordinate - jnp.floor(phi_coordinate)
+        theta_fraction = theta_coordinate - jnp.floor(theta_coordinate)
+
+        lower_radius = (
+            (1.0 - theta_fraction) * wall_radius[phi_lower, theta_lower]
+            + theta_fraction * wall_radius[phi_lower, theta_upper]
+        )
+        upper_radius = (
+            (1.0 - theta_fraction) * wall_radius[phi_upper, theta_lower]
+            + theta_fraction * wall_radius[phi_upper, theta_upper]
+        )
+        interpolated_radius = (
+            (1.0 - phi_fraction) * lower_radius
+            + phi_fraction * upper_radius
+        )
+        return interpolated_radius - rho
+
+    return signed_distance
+
+
 def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     _require_cyna()
     pytest.importorskip("joblib")
@@ -504,6 +557,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
                 ManifoldContinuationStage(
                     name="strike",
                     strike_weight=1.0,
+                    xline_clearance_weight=0.1,
                 ),
             )
         ),
@@ -519,6 +573,30 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         max_turns=3,
         production_DPhi=QA_WALL_DPHI,
     )
+    xline_clearance_config = XLineClearanceValidationConfig(
+        wall=wall,
+        required_minimum_clearance_m=5.0e-4,
+        maximum_closure_error_m=1.0e-4,
+        production_DPhi=QA_WALL_DPHI,
+    )
+    wall_signed_distance = _qa_wall_radial_signed_distance(wall)
+
+    def clearance_loss(shape_dof):
+        return periodic_xline_clearance_loss(
+            _qa_shape_field(shape_dof),
+            QA_INITIAL_GUESS,
+            wall_signed_distance,
+            minimum_clearance_m=5.0e-4,
+            clearance_scale_m=1.0e-3,
+            phi_span=QA_FIELD_PERIOD,
+            map_power=5,
+            n_steps_per_span=128,
+            newton_iterations=8,
+            newton_damping=0.8,
+            bphi_floor=1.0e-10,
+            residual_tolerance=1.0e-8,
+            sample_stride=4,
+        )
 
     def shape_hit(shape_dof):
         return trace_manifold_strike_reference(
@@ -585,12 +663,14 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
             refine_stable_inverse_anchor=False,
             n_threads=1,
             strike_validation_config=strike_config,
+            xline_clearance_config=xline_clearance_config,
         )
 
     initial_loss = manifold_strike_stage2_target_loss(
         _qa_shape_field(initial_shape_dof),
         target_state=shape_target,
     )
+    initial_clearance_loss = clearance_loss(initial_shape_dof)
     result = validated_manifold_backtracking_step(
         np.array([QA_SHAPE_DOF_NOMINAL]),
         np.array([proposed_shape_dof]),
@@ -604,6 +684,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         result.field,
         target_state=shape_target,
     )
+    final_clearance_loss = clearance_loss(result.dofs[0])
     nominal_lengths = np.asarray(
         _qa_shape_field(QA_SHAPE_DOF_NOMINAL).coils.length
     )
@@ -616,11 +697,23 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     assert result.step_fraction == 1.0
     assert abs(result.dofs[0] - desired_shape_dof) < 1.0e-8
     assert float(final_loss) < 1.0e-5 * float(initial_loss)
+    np.testing.assert_allclose(initial_clearance_loss, 0.0, atol=1.0e-14)
+    np.testing.assert_allclose(final_clearance_loss, 0.0, atol=1.0e-14)
     assert 2.0e-5 < maximum_length_change < 4.0e-5
     accepted = result.attempts[-1].validation
     assert accepted.production_refresh.anchor_displacement_m < 6.0e-4
     assert accepted.correspondence.max_deviation_m < 1.0e-4
     assert accepted.sample_refresh.sample_displacement_m < 1.0e-3
+    assert accepted.xline_clearance_validation.accepted
+    assert (
+        1.0e-3
+        < accepted.xline_clearance_validation.minimum_clearance_m
+        < 2.0e-3
+    )
+    assert (
+        accepted.xline_clearance_validation.closure_error_m
+        < 2.0e-6
+    )
     assert accepted.strike_validation.accepted
     assert (
         accepted.strike_validation.strike_refresh.hit_displacement_m

@@ -282,10 +282,20 @@ coil lengths by only about `31 micrometres`.  The full proposal passes the
 production X-line, direction, manifold-sample, exact strike-label, local wall,
 and JAX/Cyna correspondence gates without backtracking.
 
+The same solve now carries a periodic-X-line clearance stage.  A frozen JAX
+radial interpolant of the regression wall has zero hinge violation at the
+`0.5 mm` requested margin before and after the shape step.  The independent
+Cyna/PyNA gate traces all five field periods against the full wall: the
+accepted candidate has about `1.32 mm` minimum continuous-section clearance
+at the converged output spacing and `0.54 micrometres` orbit-closure error.
+Wall projections are rotated back
+to the signed, unwrapped orbit phase before their inside/outside sign is used,
+which is essential after crossing an `nfp=2` field-period seam.
+
 This closes the first physical QA coil/wall and three-dimensional strike
-checkpoint, including a true QA modular-coil shape step.  Wall loading and
-clearance objectives and multi-DOF engineering-constrained optimization remain
-subsequent milestones.
+checkpoint, including a true QA modular-coil shape step and periodic-X-line
+clearance.  Wall heat loading, pre-strike manifold-leg clearance, and multi-DOF
+engineering-constrained optimization remain subsequent milestones.
 
 ## Optimizer proposal rollback
 
