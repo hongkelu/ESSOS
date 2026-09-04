@@ -178,12 +178,15 @@ step boundary.  Given a trial ESSOS field and an explicit production grid, it:
 1. samples the trial field into a PyNA cylindrical snapshot;
 2. asks PyNA/Cyna to continue the X-point and retrace the same sparse seed
    orders under anchor and tangent trust limits;
-3. traces the candidate branch directly through the live ESSOS field with JAX;
-4. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
+3. when X-line clearance is active, asks Cyna to sample the complete production
+   orbit and PyNA to reject domain loss, closure drift, or insufficient signed
+   clearance from the continuously interpolated wall;
+4. traces the candidate branch directly through the live ESSOS field with JAX;
+5. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
    sample label under its displacement limit;
-5. when a strike target is active, runs the global Cyna wall trace, exact strike
+6. when a strike target is active, runs the global Cyna wall trace, exact strike
    refresh, local-plane rebuild, and metric-specific JAX/Cyna strike gate; and
-6. returns a new continuation state only when every required gate accepts.
+7. returns a new continuation state only when every required gate accepts.
 
 The returned `ManifoldContinuationValidationReport` retains the individual
 PyNA reports and a stable rejection reason.  A rejected report contains no

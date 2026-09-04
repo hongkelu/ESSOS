@@ -9,6 +9,7 @@ the package boundary and advances immutable ESSOS state after all gates pass.
 from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
+from collections.abc import Callable
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -36,6 +37,9 @@ def _pyna_validation_api():
         from pyna.topo.manifold_refresh import (
             refresh_manifold_branch_reference_field,
         )
+        from pyna.topo.xline_clearance import (
+            validate_periodic_xline_clearance,
+        )
     except ImportError as exc:  # pragma: no cover - depends on installation
         raise ImportError(
             "ESSOS manifold candidate validation requires PyNA and Cyna"
@@ -44,7 +48,39 @@ def _pyna_validation_api():
         refresh_manifold_branch_reference_field,
         compare_jax_manifold_branch,
         refresh_manifold_sample_match,
+        validate_periodic_xline_clearance,
     )
+
+
+@dataclass(frozen=True)
+class XLineClearanceValidationConfig:
+    """ESSOS orchestration settings for PyNA's production clearance gate."""
+
+    wall: Any
+    required_minimum_clearance_m: float
+    maximum_closure_error_m: float
+    production_DPhi: float = 0.01
+    extend_phi: bool = True
+    production_trace_function: Callable[..., Any] | None = None
+
+    def __post_init__(self) -> None:
+        for attribute in (
+            "required_minimum_clearance_m",
+            "maximum_closure_error_m",
+        ):
+            value = float(getattr(self, attribute))
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"{attribute} must be non-negative and finite")
+            object.__setattr__(self, attribute, value)
+        step = float(self.production_DPhi)
+        if not np.isfinite(step) or step <= 0.0:
+            raise ValueError("production_DPhi must be positive and finite")
+        if self.production_trace_function is not None and not callable(
+            self.production_trace_function
+        ):
+            raise TypeError("production_trace_function must be callable or None")
+        object.__setattr__(self, "production_DPhi", step)
+        object.__setattr__(self, "extend_phi", bool(self.extend_phi))
 
 
 @dataclass(frozen=True)
@@ -63,6 +99,7 @@ class ManifoldContinuationValidationReport:
         compare=False,
         repr=False,
     )
+    xline_clearance_validation: Any | None = None
 
     def __post_init__(self) -> None:
         accepted = bool(self.accepted)
@@ -92,6 +129,15 @@ class ManifoldContinuationValidationReport:
             ):
                 raise ValueError(
                     "an accepted strike-aware validation requires its strike gate"
+                )
+            if (
+                self.xline_clearance_validation is not None
+                and not bool(
+                    getattr(self.xline_clearance_validation, "accepted", False)
+                )
+            ):
+                raise ValueError(
+                    "an accepted validation requires its X-line clearance gate"
                 )
         else:
             if reason is None:
@@ -138,6 +184,7 @@ def validate_manifold_continuation_candidate(
     extend_phi: bool = True,
     n_threads: int = -1,
     strike_validation_config: ManifoldStrikeValidationConfig | None = None,
+    xline_clearance_config: XLineClearanceValidationConfig | None = None,
 ) -> ManifoldContinuationValidationReport:
     """Validate a trial field and advance only after all PyNA gates pass.
 
@@ -156,10 +203,30 @@ def validate_manifold_continuation_candidate(
         raise TypeError(
             "an active strike target requires ManifoldStrikeValidationConfig"
         )
+    clearance_is_active = (
+        continuation_state.stage.xline_clearance_weight > 0.0
+    )
+    if clearance_is_active and not isinstance(
+        xline_clearance_config,
+        XLineClearanceValidationConfig,
+    ):
+        raise TypeError(
+            "an active X-line clearance term requires "
+            "XLineClearanceValidationConfig"
+        )
+    if xline_clearance_config is not None and not isinstance(
+        xline_clearance_config,
+        XLineClearanceValidationConfig,
+    ):
+        raise TypeError(
+            "xline_clearance_config must be "
+            "XLineClearanceValidationConfig or None"
+        )
     (
         production_refresh_function,
         compare_jax_manifold_branch,
         refresh_manifold_sample_match,
+        validate_periodic_xline_clearance,
     ) = _pyna_validation_api()
 
     production_field = essos_field_to_pyna_cylindrical_grid(
@@ -208,6 +275,45 @@ def validate_manifold_continuation_candidate(
         )
 
     candidate_branch = production_refresh.candidate_branch
+    xline_clearance_validation = None
+    if xline_clearance_config is not None:
+        config = xline_clearance_config
+        xline_clearance_validation = validate_periodic_xline_clearance(
+            production_field,
+            candidate_branch,
+            config.wall,
+            DPhi=config.production_DPhi,
+            required_minimum_clearance_m=(
+                config.required_minimum_clearance_m
+            ),
+            maximum_closure_error_m=config.maximum_closure_error_m,
+            extend_phi=config.extend_phi,
+            trace_function=config.production_trace_function,
+        )
+        if not xline_clearance_validation.accepted:
+            return ManifoldContinuationValidationReport(
+                production_refresh=production_refresh,
+                correspondence=None,
+                sample_refresh=None,
+                accepted_state=None,
+                accepted=False,
+                rejection_reason=(
+                    "xline_clearance_validation:"
+                    f"{xline_clearance_validation.rejection_reason or 'unknown'}"
+                ),
+                diagnostics={
+                    "minimum_xline_clearance_m": (
+                        xline_clearance_validation.minimum_clearance_m
+                    ),
+                    "required_minimum_xline_clearance_m": (
+                        xline_clearance_validation.required_minimum_clearance_m
+                    ),
+                    "production_xline_closure_error_m": (
+                        xline_clearance_validation.closure_error_m
+                    ),
+                },
+                xline_clearance_validation=xline_clearance_validation,
+            )
     jax_trace = trace_manifold_reference(
         candidate_field,
         candidate_branch,
@@ -242,6 +348,7 @@ def validate_manifold_continuation_candidate(
                 "jax_cyna_tolerance_m": correspondence.absolute_tolerance_m,
                 "production_branch_complete": correspondence.complete,
             },
+            xline_clearance_validation=xline_clearance_validation,
         )
     if not sample_refresh.accepted:
         return ManifoldContinuationValidationReport(
@@ -260,6 +367,7 @@ def validate_manifold_continuation_candidate(
                     sample_refresh.maximum_sample_displacement_m
                 ),
             },
+            xline_clearance_validation=xline_clearance_validation,
         )
 
     strike_validation = None
@@ -295,6 +403,7 @@ def validate_manifold_continuation_candidate(
                 ),
                 strike_validation=strike_validation,
                 diagnostics=strike_validation.diagnostics,
+                xline_clearance_validation=xline_clearance_validation,
             )
         accepted_strike_target = strike_validation.accepted_target
 
@@ -318,6 +427,18 @@ def validate_manifold_continuation_candidate(
             "max_jax_cyna_deviation_m": correspondence.max_deviation_m,
             **(
                 {}
+                if xline_clearance_validation is None
+                else {
+                    "minimum_xline_clearance_m": (
+                        xline_clearance_validation.minimum_clearance_m
+                    ),
+                    "production_xline_closure_error_m": (
+                        xline_clearance_validation.closure_error_m
+                    ),
+                }
+            ),
+            **(
+                {}
                 if strike_validation is None
                 else {
                     "strike_displacement_m": (
@@ -329,10 +450,12 @@ def validate_manifold_continuation_candidate(
                 }
             ),
         },
+        xline_clearance_validation=xline_clearance_validation,
     )
 
 
 __all__ = [
     "ManifoldContinuationValidationReport",
+    "XLineClearanceValidationConfig",
     "validate_manifold_continuation_candidate",
 ]

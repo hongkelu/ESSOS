@@ -33,6 +33,7 @@ from essos.manifold_optimization import (
     ManifoldStage2Target,
 )
 from essos.manifold_validation import (
+    XLineClearanceValidationConfig,
     validate_manifold_continuation_candidate,
 )
 from essos.manifold_strike_optimization import ManifoldStrikeStage2Target
@@ -165,6 +166,20 @@ def _strike_wall(n_phi=8, n_pol=64):
     theta = np.linspace(0.0, 2.0 * np.pi, n_pol, endpoint=False)
     R = np.broadcast_to(1.0 + 0.02 * np.cos(theta), (n_phi, n_pol)).copy()
     Z = np.broadcast_to(0.02 * np.sin(theta), (n_phi, n_pol)).copy()
+    return ToroidalWall(phi, R, Z)
+
+
+def _xline_clearance_wall(minor_radius=0.05, n_phi=8, n_pol=128):
+    phi = np.linspace(0.0, 2.0 * np.pi, n_phi, endpoint=False)
+    theta = np.linspace(0.0, 2.0 * np.pi, n_pol, endpoint=False)
+    R = np.broadcast_to(
+        1.0 + minor_radius * np.cos(theta),
+        (n_phi, n_pol),
+    ).copy()
+    Z = np.broadcast_to(
+        minor_radius * np.sin(theta),
+        (n_phi, n_pol),
+    ).copy()
     return ToroidalWall(phi, R, Z)
 
 
@@ -302,6 +317,58 @@ def test_candidate_validation_advances_after_all_three_pyna_gates():
     assert report.candidate_branch.origin_label == "21:P0"
     np.testing.assert_array_equal(report.candidate_branch.seed_orders, SEED_ORDERS)
     assert state.stage_index == 0
+
+
+def test_candidate_validation_requires_and_applies_production_clearance_gate():
+    _require_cyna()
+    base_state = _continuation_state()
+    state = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(
+                    name="clearance",
+                    xline_clearance_weight=0.2,
+                ),
+            )
+        ),
+        base_state.target_state,
+    )
+    candidate = _ShiftedHyperbolicField(jnp.array([0.36, 1.0003, -0.0002]))
+
+    with pytest.raises(TypeError, match="XLineClearanceValidationConfig"):
+        _validate(candidate, state)
+
+    accepted = _validate(
+        candidate,
+        state,
+        xline_clearance_config=XLineClearanceValidationConfig(
+            wall=_xline_clearance_wall(),
+            required_minimum_clearance_m=0.04,
+            maximum_closure_error_m=1.0e-8,
+            production_DPhi=MAP_SPAN / N_STEPS_PER_SPAN,
+        ),
+    )
+    assert accepted.accepted
+    assert accepted.xline_clearance_validation.accepted
+    assert accepted.diagnostics["minimum_xline_clearance_m"] > 0.049
+
+    rejected = _validate(
+        candidate,
+        state,
+        xline_clearance_config=XLineClearanceValidationConfig(
+            wall=_xline_clearance_wall(),
+            required_minimum_clearance_m=0.06,
+            maximum_closure_error_m=1.0e-8,
+            production_DPhi=MAP_SPAN / N_STEPS_PER_SPAN,
+        ),
+    )
+    assert not rejected.accepted
+    assert rejected.correspondence is None
+    assert rejected.sample_refresh is None
+    assert rejected.xline_clearance_validation is not None
+    assert not rejected.xline_clearance_validation.accepted
+    assert rejected.rejection_reason.endswith("clearance_below_limit")
+    assert rejected.accepted_state is None
 
 
 def test_candidate_validation_advances_strike_state_only_after_its_gates():
