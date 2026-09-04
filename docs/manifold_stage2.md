@@ -14,7 +14,8 @@ The intended Stage-2 sequence is:
 1. Optimize normal field and engineering metrics with the existing ESSOS
    objectives.
 2. Initialize and identify the desired edge topology with PyNA.
-3. Ramp smooth PyNA return-map and X-line objectives inside the ESSOS loss.
+3. Ramp smooth PyNA return-map, X-line, and fixed-label manifold objectives
+   inside the ESSOS loss.
 4. Refresh the tracked topology in an outer loop and validate accepted designs
    using the production PyNA/Cyna tracing path.
 
@@ -40,5 +41,34 @@ two initial smooth objective terms:
 The inner loss never decides whether Newton found the intended orbit.  Before
 accepting an optimizer step, the outer loop must inspect the residual and
 `converged` flag, update the initial guess, and compare against the production
-PyNA/Cyna map.  Manifold branches, wall strikes, and heat-load losses remain
-later milestones.
+PyNA/Cyna map.
+
+## Parallel JAX and Cyna manifold paths
+
+PyNA now exposes a differentiable JAX manifold tracer in parallel with its
+production Cyna tracer.  Parallel here means two implementations of the same
+labelled return-map problem, not that they must execute concurrently.  JAX can
+itself run on CUDA when a CUDA-enabled JAX runtime is installed; Cyna retains
+its CPU/CUDA production role for high-throughput and wall-aware tracing.
+
+ESSOS does not reproduce PyNA's eigensystem or seed-spacing theory.  An outer
+PyNA topology refresh selects the orbit, stability, branch side, consistently
+oriented eigendirection, geometric seed distances, and sample correspondence.
+ESSOS passes those frozen labels to `trace_manifold_branch`, which:
+
+1. solves the current coil field's section anchor with PyNA's implicit root;
+2. uses a backward-map anchor for stable branches;
+3. asks PyNA to build the seed segment and trace all requested generations.
+
+`manifold_sample_location_loss` then penalizes the normalized `(R,Z)` error of
+one fixed `(generation, seed)` sample.  It composes with `custom_loss`, so a
+continuation controller can ramp it beside normal-field and engineering terms.
+Gradients include both X-line motion and the field dependence accumulated along
+the manifold maps, while direction, spacing, side, and correspondence remain
+stop-gradient outer state.
+
+This sample-location loss is a smooth lobe/divertor-leg placement proxy.  It is
+not yet an exact strike-point objective: wall intersection, branch relabelling,
+connection length, and heat-load evaluation remain PyNA/Cyna outer-loop
+milestones.  Accepted ESSOS steps must be re-traced there before their topology
+is trusted.

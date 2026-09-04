@@ -10,8 +10,9 @@ PyNA is imported lazily so ordinary ESSOS installations do not require it.
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -57,6 +58,28 @@ def _pyna_periodic_api():
             "ESSOS X-line objectives require PyNA's optional-JAX topology backend"
         ) from exc
     return solve_periodic_point, periodic_point_state
+
+
+def _pyna_manifold_api():
+    try:
+        from pyna.topo.jax_manifold import (
+            manifold_seed_segment,
+            trace_manifold_generations,
+        )
+    except ImportError as exc:  # pragma: no cover - depends on installation
+        raise ImportError(
+            "ESSOS manifold objectives require PyNA's optional-JAX "
+            "topology backend"
+        ) from exc
+    return manifold_seed_segment, trace_manifold_generations
+
+
+class ManifoldBranchTrace(NamedTuple):
+    """Differentiable samples for one outer-identified manifold branch."""
+
+    anchor: Any
+    seeds: Any
+    generations: Any
 
 
 def fixed_phi_poincare_map(
@@ -258,6 +281,146 @@ def periodic_xline_hyperbolicity_loss(
     return penalty
 
 
+def trace_manifold_branch(
+    field: Any,
+    initial_guess: Any,
+    branch_direction: Any,
+    seed_distances: Any,
+    *,
+    stability: str,
+    side: int,
+    phi_span: Any,
+    phi_start: Any = 0.0,
+    map_power: int = 1,
+    n_generations: int = 1,
+    n_steps_per_span: int = 256,
+    newton_iterations: int = 8,
+    newton_damping: float = 1.0,
+    bphi_floor: float = 0.0,
+) -> ManifoldBranchTrace:
+    """Trace one fixed-label stable or unstable branch of an ESSOS field.
+
+    PyNA owns both seed construction and map iteration.  ESSOS supplies the
+    active field and the branch data selected by an outer topology refresh.
+    For a stable branch, the anchor is solved against the discrete backward
+    map so the seeds and subsequent generations use the same integrator.
+    ``branch_direction`` and ``seed_distances`` are frozen by PyNA.
+    """
+
+    branch = str(stability).lower()
+    if branch not in {"stable", "unstable"}:
+        raise ValueError("stability must be 'stable' or 'unstable'")
+    anchor_span = phi_span if branch == "unstable" else -jnp.asarray(phi_span)
+    anchor = periodic_xline_position(
+        field,
+        initial_guess,
+        phi_span=anchor_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_steps_per_span=n_steps_per_span,
+        newton_iterations=newton_iterations,
+        newton_damping=newton_damping,
+        bphi_floor=bphi_floor,
+    )
+
+    manifold_seed_segment, trace_manifold_generations = _pyna_manifold_api()
+    seeds = manifold_seed_segment(
+        anchor,
+        branch_direction,
+        seed_distances,
+        side=side,
+    )
+    generations = trace_manifold_generations(
+        essos_field_callable,
+        field,
+        seeds,
+        stability=branch,
+        phi_span=phi_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_generations=n_generations,
+        n_steps_per_span=n_steps_per_span,
+        bphi_floor=bphi_floor,
+    )
+    return ManifoldBranchTrace(
+        anchor=anchor,
+        seeds=seeds,
+        generations=generations,
+    )
+
+
+def _sample_index(value: int, size: int, name: str) -> int:
+    try:
+        index = operator.index(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be an integer") from exc
+    normalized = index if index >= 0 else size + index
+    if normalized < 0 or normalized >= size:
+        raise IndexError(f"{name} is outside the traced branch")
+    return normalized
+
+
+def manifold_sample_location_loss(
+    field: Any,
+    initial_guess: Any,
+    branch_direction: Any,
+    seed_distances: Any,
+    target_rz: Any,
+    *,
+    stability: str,
+    side: int,
+    generation_index: int,
+    seed_index: int,
+    phi_span: Any,
+    phi_start: Any = 0.0,
+    map_power: int = 1,
+    n_generations: int = 1,
+    n_steps_per_span: int = 256,
+    newton_iterations: int = 8,
+    newton_damping: float = 1.0,
+    bphi_floor: float = 0.0,
+    rz_scales: Any | None = None,
+) -> Any:
+    """Target one fixed outer-labelled manifold sample in ``(R, Z)``.
+
+    This is a smooth inner-loop proxy for lobe or divertor-leg placement.  The
+    outer PyNA/Cyna refresh owns branch identity, wall intersection, and any
+    change of the selected sample correspondence.
+    """
+
+    target = jnp.asarray(target_rz)
+    if target.shape != (2,):
+        raise ValueError("target_rz must have shape (2,)")
+    scales = jnp.ones_like(target) if rz_scales is None else jnp.asarray(rz_scales)
+    if scales.shape != (2,):
+        raise ValueError("rz_scales must have shape (2,)")
+
+    trace = trace_manifold_branch(
+        field,
+        initial_guess,
+        branch_direction,
+        seed_distances,
+        stability=stability,
+        side=side,
+        phi_span=phi_span,
+        phi_start=phi_start,
+        map_power=map_power,
+        n_generations=n_generations,
+        n_steps_per_span=n_steps_per_span,
+        newton_iterations=newton_iterations,
+        newton_damping=newton_damping,
+        bphi_floor=bphi_floor,
+    )
+    generation = _sample_index(
+        generation_index,
+        trace.generations.shape[0],
+        "generation_index",
+    )
+    seed = _sample_index(seed_index, trace.generations.shape[1], "seed_index")
+    residual = (trace.generations[generation, seed] - target) / scales
+    return jnp.mean(residual * residual)
+
+
 def return_map_surface_residuals(
     field: Any,
     rz_seeds: Any,
@@ -338,14 +501,17 @@ def return_map_surface_loss(
 
 
 __all__ = [
+    "ManifoldBranchTrace",
     "biot_savart_field_callable",
     "essos_field_callable",
     "fixed_phi_poincare_map",
     "fixed_phi_poincare_map_from_coils",
+    "manifold_sample_location_loss",
     "periodic_xline_hyperbolicity_loss",
     "periodic_xline_location_loss",
     "periodic_xline_position",
     "periodic_xline_state",
     "return_map_surface_loss",
     "return_map_surface_residuals",
+    "trace_manifold_branch",
 ]
