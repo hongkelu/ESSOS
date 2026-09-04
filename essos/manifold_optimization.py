@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import operator
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from essos.losses import custom_loss
+from essos.losses import base_loss, composite_loss, custom_loss
 from essos.manifold import trace_manifold_branch
 
 
@@ -56,6 +56,119 @@ def _finite_rz(value: object, name: str) -> np.ndarray:
     if array.shape != (2,) or not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must be a finite physical (R, Z) point")
     return array
+
+
+def _continuation_weight(value: object, name: str) -> float:
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{name} must be a real scalar")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"{name} must be a real scalar") from exc
+    if not np.isfinite(result) or result < 0.0:
+        raise ValueError(f"{name} must be non-negative and finite")
+    return result
+
+
+def _continuation_index(value: object, n_stages: int) -> int:
+    if isinstance(value, (bool, np.bool_)):
+        raise TypeError("stage_index must be an integer")
+    try:
+        index = operator.index(value)
+    except TypeError as exc:
+        raise TypeError("stage_index must be an integer") from exc
+    if not 0 <= index < n_stages:
+        raise IndexError("stage_index is outside the continuation schedule")
+    return index
+
+
+@dataclass(frozen=True)
+class ManifoldContinuationStage:
+    """Topology weights held fixed during one inner Stage-2 solve."""
+
+    name: str
+    return_map_weight: float = 0.0
+    xline_weight: float = 0.0
+    manifold_weight: float = 0.0
+
+    def __post_init__(self) -> None:
+        name = str(self.name).strip()
+        if not name:
+            raise ValueError("continuation stage name must not be empty")
+        object.__setattr__(self, "name", name)
+        for attribute in (
+            "return_map_weight",
+            "xline_weight",
+            "manifold_weight",
+        ):
+            object.__setattr__(
+                self,
+                attribute,
+                _continuation_weight(getattr(self, attribute), attribute),
+            )
+
+    @property
+    def topology_active(self) -> bool:
+        return any(
+            weight > 0.0
+            for weight in (
+                self.return_map_weight,
+                self.xline_weight,
+                self.manifold_weight,
+            )
+        )
+
+
+@dataclass(frozen=True)
+class ManifoldContinuationSchedule:
+    """Ordered, user-scaled topology ramp for Stage-2 coil optimization."""
+
+    stages: Sequence[ManifoldContinuationStage]
+
+    def __post_init__(self) -> None:
+        stages = tuple(self.stages)
+        if not stages:
+            raise ValueError("continuation schedule must contain at least one stage")
+        if not all(isinstance(stage, ManifoldContinuationStage) for stage in stages):
+            raise TypeError("every continuation stage must be ManifoldContinuationStage")
+        names = tuple(stage.name for stage in stages)
+        if len(set(names)) != len(names):
+            raise ValueError("continuation stage names must be unique")
+        object.__setattr__(self, "stages", stages)
+
+    def __len__(self) -> int:
+        return len(self.stages)
+
+    def __getitem__(self, index: int) -> ManifoldContinuationStage:
+        return self.stages[index]
+
+
+@dataclass(frozen=True)
+class ManifoldContinuationState:
+    """Accepted target snapshot and the currently active ramp stage."""
+
+    schedule: ManifoldContinuationSchedule
+    target_state: ManifoldStage2Target
+    stage_index: int = 0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.schedule, ManifoldContinuationSchedule):
+            raise TypeError("schedule must be ManifoldContinuationSchedule")
+        if not isinstance(self.target_state, ManifoldStage2Target):
+            raise TypeError("target_state must be ManifoldStage2Target")
+        object.__setattr__(
+            self,
+            "stage_index",
+            _continuation_index(self.stage_index, len(self.schedule)),
+        )
+
+    @property
+    def stage(self) -> ManifoldContinuationStage:
+        return self.schedule[self.stage_index]
+
+    @property
+    def final_stage(self) -> bool:
+        return self.stage_index == len(self.schedule) - 1
 
 
 @dataclass(frozen=True)
@@ -245,8 +358,129 @@ def refresh_manifold_stage2_target(
     )
 
 
+def _require_loss(value: object, name: str) -> base_loss:
+    if not isinstance(value, base_loss):
+        raise TypeError(f"{name} must be an ESSOS loss")
+    return value
+
+
+def _scaled_loss(loss: base_loss, weight: float) -> base_loss:
+    """Scale custom or composite losses without evaluating inactive terms."""
+
+    if isinstance(loss, custom_loss):
+        return weight * loss
+    if isinstance(loss, composite_loss):
+        return composite_loss(
+            [_scaled_loss(component, weight) for component in loss.losses]
+        )
+    raise TypeError("continuation terms must contain custom ESSOS losses")
+
+
+def _merged_dependencies(
+    losses: Sequence[base_loss],
+    dependencies: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if dependencies is not None:
+        return dict(dependencies)
+
+    merged: dict[str, Any] = {}
+    for loss in losses:
+        for name, dependency in loss.dependencies.items():
+            if name in merged and merged[name] is not dependency:
+                raise ValueError(
+                    f"losses use different objects for dependency {name!r}; "
+                    "pass dependencies explicitly"
+                )
+            merged[name] = dependency
+    return merged
+
+
+def compose_manifold_stage2_loss(
+    base_stage2_loss: base_loss,
+    continuation_state: ManifoldContinuationState,
+    *,
+    return_map_loss: base_loss | None = None,
+    xline_loss: base_loss | None = None,
+    field_dependency: str = "field",
+    dependencies: Mapping[str, Any] | None = None,
+) -> base_loss:
+    """Compose one fixed-weight inner loss for the active continuation stage.
+
+    ``base_stage2_loss`` remains active with unit weight.  A topology term is
+    only added when its stage weight is positive, so a zero-weight term does
+    not incur tracing or compilation cost.  The manifold term is always built
+    from the state's exact, immutable PyNA sample label.
+    """
+
+    base = _require_loss(base_stage2_loss, "base_stage2_loss")
+    if not isinstance(continuation_state, ManifoldContinuationState):
+        raise TypeError("continuation_state must be ManifoldContinuationState")
+
+    stage = continuation_state.stage
+    sources = [base]
+    weighted_terms: list[base_loss] = []
+    optional_terms = (
+        (stage.return_map_weight, return_map_loss, "return_map_loss"),
+        (stage.xline_weight, xline_loss, "xline_loss"),
+    )
+    for weight, loss, name in optional_terms:
+        if weight == 0.0:
+            continue
+        if loss is None:
+            raise ValueError(f"{name} is required when its stage weight is positive")
+        source = _require_loss(loss, name)
+        sources.append(source)
+        weighted_terms.append(_scaled_loss(source, weight))
+
+    if stage.manifold_weight > 0.0:
+        manifold_loss = make_manifold_stage2_loss(
+            continuation_state.target_state,
+            field_dependency=field_dependency,
+        )
+        sources.append(manifold_loss)
+        weighted_terms.append(_scaled_loss(manifold_loss, stage.manifold_weight))
+
+    total = base
+    for term in weighted_terms:
+        total = total + term
+    total.dependencies = _merged_dependencies(sources, dependencies)
+    return total
+
+
+def accept_manifold_continuation_stage(
+    continuation_state: ManifoldContinuationState,
+    candidate_branch: Any,
+    sample_refresh: Any,
+    correspondence: Any,
+) -> ManifoldContinuationState:
+    """Advance only after PyNA accepts label refresh and JAX/Cyna parity."""
+
+    if not isinstance(continuation_state, ManifoldContinuationState):
+        raise TypeError("continuation_state must be ManifoldContinuationState")
+    refreshed_target = refresh_manifold_stage2_target(
+        continuation_state.target_state,
+        candidate_branch,
+        sample_refresh,
+        correspondence,
+    )
+    next_index = min(
+        continuation_state.stage_index + 1,
+        len(continuation_state.schedule) - 1,
+    )
+    return replace(
+        continuation_state,
+        target_state=refreshed_target,
+        stage_index=next_index,
+    )
+
+
 __all__ = [
+    "ManifoldContinuationSchedule",
+    "ManifoldContinuationStage",
+    "ManifoldContinuationState",
     "ManifoldStage2Target",
+    "accept_manifold_continuation_stage",
+    "compose_manifold_stage2_loss",
     "make_manifold_stage2_loss",
     "manifold_stage2_target_loss",
     "refresh_manifold_stage2_target",

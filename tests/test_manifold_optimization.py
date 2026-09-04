@@ -21,12 +21,18 @@ from pyna.topo.manifold_correspondence import (
 )
 
 from essos.manifold_optimization import (
+    ManifoldContinuationSchedule,
+    ManifoldContinuationStage,
+    ManifoldContinuationState,
     ManifoldStage2Target,
+    accept_manifold_continuation_stage,
+    compose_manifold_stage2_loss,
     make_manifold_stage2_loss,
     manifold_stage2_target_loss,
     refresh_manifold_stage2_target,
     trace_manifold_reference,
 )
+from essos.losses import custom_loss
 
 
 @jax.tree_util.register_pytree_node_class
@@ -246,3 +252,167 @@ def test_target_state_rejects_inconsistent_seed_index_and_scales():
             target_RZ_m=TARGET_RZ,
             rz_scales_m=np.array([0.0, 0.01]),
         )
+
+
+def _continuation_schedule():
+    return ManifoldContinuationSchedule(
+        (
+            ManifoldContinuationStage(name="base"),
+            ManifoldContinuationStage(
+                name="topology",
+                return_map_weight=0.3,
+                xline_weight=0.2,
+                manifold_weight=0.4,
+            ),
+        )
+    )
+
+
+def test_continuation_schedule_is_immutable_and_validated():
+    schedule = _continuation_schedule()
+    state = ManifoldContinuationState(schedule, _target_state([0.25, 1.1, -0.04]))
+
+    assert isinstance(schedule.stages, tuple)
+    assert state.stage.name == "base"
+    assert not state.stage.topology_active
+    assert schedule[1].topology_active
+    assert not state.final_stage
+
+    with pytest.raises(ValueError, match="non-negative"):
+        ManifoldContinuationStage(name="bad", manifold_weight=-1.0)
+    with pytest.raises(ValueError, match="unique"):
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(name="same"),
+                ManifoldContinuationStage(name="same"),
+            )
+        )
+    with pytest.raises(IndexError, match="stage_index"):
+        ManifoldContinuationState(schedule, state.target_state, stage_index=2)
+
+
+def test_continuation_composes_weighted_value_and_gradient():
+    parameters = jnp.array([0.25, 1.1, -0.04])
+    field = _ShiftedHyperbolicField(parameters)
+    target_state = _target_state(parameters)
+    state = ManifoldContinuationState(
+        _continuation_schedule(),
+        target_state,
+        stage_index=1,
+    )
+    base_target = jnp.array([0.2, 1.0, 0.0])
+
+    def base_objective(dynamic_field):
+        return 0.5 * jnp.sum((dynamic_field.parameters - base_target) ** 2)
+
+    def return_map_objective(dynamic_field):
+        return dynamic_field.parameters[0] ** 2
+
+    def xline_r_objective(dynamic_field):
+        return dynamic_field.parameters[1] ** 2
+
+    def xline_z_objective(dynamic_field):
+        return 2.0 * dynamic_field.parameters[2] ** 2
+
+    base = custom_loss(base_objective, "field")
+    return_map = custom_loss(return_map_objective, "field")
+    xline = custom_loss(xline_r_objective, "field") + custom_loss(
+        xline_z_objective,
+        "field",
+    )
+    total = compose_manifold_stage2_loss(
+        base,
+        state,
+        return_map_loss=return_map,
+        xline_loss=xline,
+        dependencies={"field": field},
+    )
+
+    def expected(dynamic_parameters):
+        dynamic_field = _ShiftedHyperbolicField(dynamic_parameters)
+        return (
+            base_objective(dynamic_field)
+            + 0.3 * return_map_objective(dynamic_field)
+            + 0.2
+            * (xline_r_objective(dynamic_field) + xline_z_objective(dynamic_field))
+            + 0.4
+            * manifold_stage2_target_loss(
+                dynamic_field,
+                target_state=target_state,
+            )
+        )
+
+    value = total(total.starting_dofs)
+    gradient = total.grad(total.starting_dofs)
+    expected_value, expected_gradient = jax.value_and_grad(expected)(parameters)
+    np.testing.assert_allclose(value, expected_value, rtol=2.0e-12)
+    np.testing.assert_allclose(gradient, expected_gradient, rtol=3.0e-11)
+
+
+def test_continuation_omits_inactive_terms_and_requires_active_ones():
+    parameters = jnp.array([0.25, 1.1, -0.04])
+    field = _ShiftedHyperbolicField(parameters)
+    target_state = _target_state(parameters)
+    base = custom_loss(lambda dynamic_field: dynamic_field.parameters[0] ** 2, "field")
+    inactive_state = ManifoldContinuationState(_continuation_schedule(), target_state)
+    total = compose_manifold_stage2_loss(
+        base,
+        inactive_state,
+        dependencies={"field": field},
+    )
+    np.testing.assert_allclose(total(total.starting_dofs), parameters[0] ** 2)
+
+    active_state = replace(inactive_state, stage_index=1)
+    with pytest.raises(ValueError, match="return_map_loss"):
+        compose_manifold_stage2_loss(
+            base,
+            active_state,
+            dependencies={"field": field},
+        )
+
+
+def test_continuation_advances_only_after_both_pyna_gates_accept():
+    initial_parameters = np.array([0.25, 1.1, -0.04])
+    candidate_parameters = np.array([0.26, 1.1002, -0.04])
+    state = ManifoldContinuationState(
+        _continuation_schedule(),
+        _target_state(initial_parameters),
+    )
+    candidate_branch = _branch_reference(candidate_parameters)
+    candidate_trace = trace_manifold_reference(
+        _ShiftedHyperbolicField(jnp.asarray(candidate_parameters)),
+        candidate_branch,
+        n_steps_per_span=128,
+        newton_iterations=4,
+    )
+    correspondence = compare_jax_manifold_branch(
+        candidate_branch,
+        candidate_trace.generations,
+        absolute_tolerance_m=3.0e-12,
+    )
+    sample_refresh = refresh_manifold_sample_match(
+        state.target_state.sample_match,
+        candidate_branch,
+        TARGET_RZ,
+        maximum_sample_displacement_m=2.0e-3,
+    )
+
+    accepted = accept_manifold_continuation_stage(
+        state,
+        candidate_branch,
+        sample_refresh,
+        correspondence,
+    )
+    assert accepted.stage_index == 1
+    assert accepted.stage.name == "topology"
+    assert accepted.target_state.label == state.target_state.label
+    assert accepted.final_stage
+
+    with pytest.raises(ValueError, match="correspondence"):
+        accept_manifold_continuation_stage(
+            state,
+            candidate_branch,
+            sample_refresh,
+            replace(correspondence, accepted=False),
+        )
+    assert state.stage_index == 0
