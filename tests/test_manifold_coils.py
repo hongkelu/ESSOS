@@ -27,6 +27,7 @@ from pyna.toroidal.flt import (
 
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
+from essos.manifold_driver import validated_manifold_backtracking_step
 from essos.manifold import (
     essos_field_to_pyna_cylindrical_grid,
     periodic_xline_state,
@@ -37,6 +38,8 @@ from essos.manifold_optimization import (
     ManifoldContinuationStage,
     ManifoldContinuationState,
     ManifoldStage2Target,
+    manifold_stage2_target_loss,
+    trace_manifold_reference,
 )
 from essos.manifold_validation import validate_manifold_continuation_candidate
 
@@ -103,6 +106,121 @@ def _require_cyna():
 
     if not cyna.is_available() or cyna.VectorFieldCylind is None:
         pytest.skip("cyna VectorFieldCylind is unavailable")
+
+
+def _tokamak_production_branch(field):
+    xline = periodic_xline_state(
+        field,
+        INITIAL_GUESS,
+        phi_span=MAP_SPAN,
+        n_steps_per_span=64,
+        newton_iterations=6,
+        bphi_floor=1.0e-8,
+    )
+    production_field = essos_field_to_pyna_cylindrical_grid(
+        field,
+        PRODUCTION_R,
+        PRODUCTION_Z,
+        PRODUCTION_PHI,
+        nfp=N_TF,
+        batch_size=512,
+    )
+    fixed_point = FixedPoint(
+        phi=0.0,
+        R=float(xline.position[0]),
+        Z=float(xline.position[1]),
+        kind="X",
+        DPm=np.asarray(xline.monodromy),
+    )
+    fixed_point.map_power = 1
+    fixed_point.metadata.update(
+        {
+            "orbit_id": 1,
+            "map_order_index": 0,
+            "monodromy_map_span": float(MAP_SPAN),
+        }
+    )
+    production_xline = refine_fixed_points_monodromy_span_field(
+        production_field,
+        [fixed_point],
+        field_period=float(MAP_SPAN),
+        map_power=1,
+        DPhi=float(MAP_SPAN) / 64,
+        keep_unconverged=False,
+    )[0]
+    payload = trace_fixed_point_manifolds_field(
+        production_field,
+        [production_xline],
+        phi_section=0.0,
+        map_span=float(MAP_SPAN),
+        N_turns=2,
+        DPhi=float(MAP_SPAN) / 64,
+        seed_distances=np.array([1.0e-5, 3.0e-5]),
+        seed_orders=np.array([2, 5]),
+        refine_stable_inverse_anchor=False,
+    )[0]
+    return manifold_branch_reference_from_trace(
+        payload,
+        stability="unstable",
+        seed_side=1,
+        n_generations=2,
+    )
+
+
+def _tokamak_continuation_state(
+    branch,
+    *,
+    target_RZ_m=None,
+    rz_scales_m=(1.0e-3, 1.0e-3),
+    stage_index=0,
+):
+    label = branch.sample_label(2, 0)
+    point = branch.point(label)
+    jax_seed_index = branch.seed_index(label.seed_order)
+    match = ManifoldSampleMatch(
+        label=label,
+        point_RZ_m=point,
+        distance_m=0.0,
+        jax_seed_index=jax_seed_index,
+    )
+    target = ManifoldStage2Target(
+        branch_reference=branch,
+        sample_match=match,
+        target_RZ_m=point if target_RZ_m is None else target_RZ_m,
+        rz_scales_m=np.asarray(rz_scales_m),
+        n_steps_per_span=64,
+        newton_iterations=6,
+        bphi_floor=1.0e-8,
+    )
+    schedule = ManifoldContinuationSchedule(
+        (
+            ManifoldContinuationStage(name="base"),
+            ManifoldContinuationStage(name="manifold", manifold_weight=0.1),
+        )
+    )
+    return ManifoldContinuationState(
+        schedule,
+        target,
+        stage_index=stage_index,
+    )
+
+
+def _validate_tokamak_candidate(field, continuation):
+    return validate_manifold_continuation_candidate(
+        field,
+        continuation,
+        PRODUCTION_R,
+        PRODUCTION_Z,
+        PRODUCTION_PHI,
+        nfp=N_TF,
+        sampling_batch_size=512,
+        maximum_anchor_displacement_m=2.0e-3,
+        minimum_direction_alignment=0.9,
+        maximum_sample_displacement_m=2.0e-3,
+        jax_cyna_tolerance_m=2.0e-4,
+        production_DPhi=float(MAP_SPAN) / 64,
+        require_complete_correspondence=True,
+    )
 
 
 def test_coil_current_moves_a_hyperbolic_xline_and_its_manifold():
@@ -214,104 +332,11 @@ def test_coil_current_moves_a_hyperbolic_xline_and_its_manifold():
 def test_tokamak_pf_coil_candidate_passes_full_outer_validation():
     _require_cyna()
     nominal_field = _physical_field(1.0)
-    xline = periodic_xline_state(
-        nominal_field,
-        INITIAL_GUESS,
-        phi_span=MAP_SPAN,
-        n_steps_per_span=64,
-        newton_iterations=6,
-        bphi_floor=1.0e-8,
-    )
-    production_field = essos_field_to_pyna_cylindrical_grid(
-        nominal_field,
-        PRODUCTION_R,
-        PRODUCTION_Z,
-        PRODUCTION_PHI,
-        nfp=N_TF,
-        batch_size=512,
-    )
-    fixed_point = FixedPoint(
-        phi=0.0,
-        R=float(xline.position[0]),
-        Z=float(xline.position[1]),
-        kind="X",
-        DPm=np.asarray(xline.monodromy),
-    )
-    fixed_point.map_power = 1
-    fixed_point.metadata.update(
-        {
-            "orbit_id": 1,
-            "map_order_index": 0,
-            "monodromy_map_span": float(MAP_SPAN),
-        }
-    )
-    production_xline = refine_fixed_points_monodromy_span_field(
-        production_field,
-        [fixed_point],
-        field_period=float(MAP_SPAN),
-        map_power=1,
-        DPhi=float(MAP_SPAN) / 64,
-        keep_unconverged=False,
-    )[0]
-    payload = trace_fixed_point_manifolds_field(
-        production_field,
-        [production_xline],
-        phi_section=0.0,
-        map_span=float(MAP_SPAN),
-        N_turns=2,
-        DPhi=float(MAP_SPAN) / 64,
-        seed_distances=np.array([1.0e-5, 3.0e-5]),
-        seed_orders=np.array([2, 5]),
-        refine_stable_inverse_anchor=False,
-    )[0]
-    branch = manifold_branch_reference_from_trace(
-        payload,
-        stability="unstable",
-        seed_side=1,
-        n_generations=2,
-    )
-    label = branch.sample_label(2, 0)
-    point = branch.point(label)
-    match = ManifoldSampleMatch(
-        label=label,
-        point_RZ_m=point,
-        distance_m=0.0,
-        jax_seed_index=0,
-    )
-    target = ManifoldStage2Target(
-        branch_reference=branch,
-        sample_match=match,
-        target_RZ_m=point,
-        rz_scales_m=np.array([1.0e-3, 1.0e-3]),
-        n_steps_per_span=64,
-        newton_iterations=6,
-        bphi_floor=1.0e-8,
-    )
-    continuation = ManifoldContinuationState(
-        ManifoldContinuationSchedule(
-            (
-                ManifoldContinuationStage(name="base"),
-                ManifoldContinuationStage(name="manifold", manifold_weight=0.1),
-            )
-        ),
-        target,
-    )
+    branch = _tokamak_production_branch(nominal_field)
+    continuation = _tokamak_continuation_state(branch)
+    target = continuation.target_state
 
-    report = validate_manifold_continuation_candidate(
-        _physical_field(1.0002),
-        continuation,
-        PRODUCTION_R,
-        PRODUCTION_Z,
-        PRODUCTION_PHI,
-        nfp=N_TF,
-        sampling_batch_size=512,
-        maximum_anchor_displacement_m=2.0e-3,
-        minimum_direction_alignment=0.9,
-        maximum_sample_displacement_m=2.0e-3,
-        jax_cyna_tolerance_m=2.0e-4,
-        production_DPhi=float(MAP_SPAN) / 64,
-        require_complete_correspondence=True,
-    )
+    report = _validate_tokamak_candidate(_physical_field(1.0002), continuation)
 
     assert report.accepted
     assert report.accepted_state is not None
@@ -319,3 +344,78 @@ def test_tokamak_pf_coil_candidate_passes_full_outer_validation():
     assert report.accepted_state.target_state.label == target.label
     assert report.correspondence.max_deviation_m < 2.0e-4
     assert report.production_refresh.anchor_displacement_m < 2.0e-3
+
+
+def test_bounded_pf_current_step_reaches_a_manifold_target():
+    _require_cyna()
+    branch = _tokamak_production_branch(_physical_field(1.0))
+    desired_control = 1.001
+    desired_trace = trace_manifold_reference(
+        _physical_field(desired_control),
+        branch,
+        n_steps_per_span=64,
+        newton_iterations=6,
+        bphi_floor=1.0e-8,
+    )
+    label = branch.sample_label(2, 0)
+    jax_seed_index = branch.seed_index(label.seed_order)
+    target_RZ_m = np.asarray(
+        desired_trace.generations[label.generation_index, jax_seed_index]
+    )
+    rz_scales_m = np.array([1.0e-4, 1.0e-4])
+    continuation = _tokamak_continuation_state(
+        branch,
+        target_RZ_m=target_RZ_m,
+        rz_scales_m=rz_scales_m,
+        stage_index=1,
+    )
+
+    def endpoint(control):
+        trace = trace_manifold_reference(
+            _physical_field(control),
+            branch,
+            n_steps_per_span=64,
+            newton_iterations=6,
+            bphi_floor=1.0e-8,
+        )
+        return trace.generations[label.generation_index, jax_seed_index]
+
+    initial_control = jnp.asarray(1.0)
+    initial_endpoint = endpoint(initial_control)
+    normalized_residual = (initial_endpoint - target_RZ_m) / rz_scales_m
+    normalized_jacobian = jax.jacfwd(endpoint)(initial_control) / rz_scales_m
+    gauss_newton_step = -jnp.vdot(
+        normalized_jacobian,
+        normalized_residual,
+    ) / jnp.vdot(normalized_jacobian, normalized_jacobian)
+    proposed_control = np.clip(
+        float(initial_control + gauss_newton_step),
+        0.999,
+        1.0015,
+    )
+    initial_loss = manifold_stage2_target_loss(
+        _physical_field(initial_control),
+        target_state=continuation.target_state,
+    )
+
+    result = validated_manifold_backtracking_step(
+        np.array([float(initial_control)]),
+        np.array([proposed_control]),
+        lambda dofs: _physical_field(dofs[0]),
+        continuation,
+        _validate_tokamak_candidate,
+        contraction=0.5,
+        maximum_attempts=5,
+    )
+    final_loss = manifold_stage2_target_loss(
+        result.field,
+        target_state=continuation.target_state,
+    )
+
+    assert result.accepted
+    assert result.step_fraction == 1.0
+    assert abs(result.dofs[0] - desired_control) < 2.0e-6
+    assert float(final_loss) < 1.0e-5 * float(initial_loss)
+    assert result.continuation_state.stage_index == 1
+    assert result.continuation_state.target_state.label == label.key
+    assert result.attempts[-1].validation.correspondence.max_deviation_m < 2.0e-4
