@@ -22,7 +22,10 @@ from essos.manifold_optimization import (
     accept_manifold_continuation_stage,
     trace_manifold_reference,
 )
-from essos.manifold_heat_optimization import refresh_manifold_heat_stage2_target
+from essos.manifold_heat_optimization import (
+    refresh_manifold_heat_stage2_target,
+    trace_manifold_heat_reference,
+)
 from essos.manifold_strike_validation import (
     ManifoldStrikeValidationConfig,
     validate_manifold_strike_candidate,
@@ -42,6 +45,9 @@ def _pyna_validation_api():
             validate_periodic_xline_clearance,
         )
         from pyna.topo.manifold_heat import validate_manifold_heat_load
+        from pyna.topo.manifold_strike_correspondence import (
+            compare_jax_manifold_strike_bundle,
+        )
     except ImportError as exc:  # pragma: no cover - depends on installation
         raise ImportError(
             "ESSOS manifold candidate validation requires PyNA and Cyna"
@@ -52,6 +58,7 @@ def _pyna_validation_api():
         refresh_manifold_sample_match,
         validate_periodic_xline_clearance,
         validate_manifold_heat_load,
+        compare_jax_manifold_strike_bundle,
     )
 
 
@@ -94,6 +101,7 @@ class ManifoldHeatValidationConfig:
     phi_edges: Sequence[float]
     s_edges: Sequence[float]
     maximum_hit_displacement_m: float
+    jax_cyna_tolerance_m: float
     maximum_unresolved_power_W: float = 0.0
     maximum_projection_distance_m: float = 1.0e-3
     max_turns: int = 100
@@ -107,6 +115,7 @@ class ManifoldHeatValidationConfig:
             "maximum_hit_displacement_m",
             "maximum_unresolved_power_W",
             "maximum_projection_distance_m",
+            "jax_cyna_tolerance_m",
         ):
             value = float(getattr(self, attribute))
             if not np.isfinite(value) or value < 0.0:
@@ -163,6 +172,8 @@ class ManifoldContinuationValidationReport:
     )
     xline_clearance_validation: Any | None = None
     heat_validation: Any | None = None
+    heat_strike_state: Any | None = None
+    heat_correspondence: Any | None = None
 
     def __post_init__(self) -> None:
         accepted = bool(self.accepted)
@@ -207,6 +218,11 @@ class ManifoldContinuationValidationReport:
                 and (
                     self.heat_validation is None
                     or not bool(getattr(self.heat_validation, "accepted", False))
+                    or self.heat_strike_state is None
+                    or self.heat_correspondence is None
+                    or not bool(
+                        getattr(self.heat_correspondence, "accepted", False)
+                    )
                 )
             ):
                 raise ValueError(
@@ -315,6 +331,7 @@ def validate_manifold_continuation_candidate(
         refresh_manifold_sample_match,
         validate_periodic_xline_clearance,
         validate_manifold_heat_load,
+        compare_jax_manifold_strike_bundle,
     ) = _pyna_validation_api()
 
     production_field = essos_field_to_pyna_cylindrical_grid(
@@ -404,6 +421,8 @@ def validate_manifold_continuation_candidate(
             )
     heat_validation = None
     accepted_heat_target = None
+    heat_strike_state = None
+    heat_correspondence = None
     if continuation_state.heat_target_state is not None:
         config = heat_validation_config
         heat_target = continuation_state.heat_target_state
@@ -464,6 +483,45 @@ def validate_manifold_continuation_candidate(
             candidate_branch,
             heat_validation,
         )
+        heat_strike_state = trace_manifold_heat_reference(
+            candidate_field,
+            accepted_heat_target,
+        )
+        heat_correspondence = compare_jax_manifold_strike_bundle(
+            accepted_heat_target.strike_matches,
+            heat_strike_state,
+            absolute_tolerance_m=config.jax_cyna_tolerance_m,
+        )
+        if not heat_correspondence.accepted:
+            return ManifoldContinuationValidationReport(
+                production_refresh=production_refresh,
+                correspondence=None,
+                sample_refresh=None,
+                accepted_state=None,
+                accepted=False,
+                rejection_reason=(
+                    "heat_jax_cyna_correspondence:"
+                    f"{heat_correspondence.rejection_reason or 'unknown'}"
+                ),
+                diagnostics={
+                    "production_peak_heat_flux_W_m2": (
+                        heat_validation.peak_heat_flux_W_m2
+                    ),
+                    "production_unresolved_power_W": (
+                        heat_validation.unresolved_power_W
+                    ),
+                    "max_jax_cyna_heat_strike_deviation_m": (
+                        heat_correspondence.max_deviation_m
+                    ),
+                    "jax_cyna_heat_strike_tolerance_m": (
+                        heat_correspondence.absolute_tolerance_m
+                    ),
+                },
+                xline_clearance_validation=xline_clearance_validation,
+                heat_validation=heat_validation,
+                heat_strike_state=heat_strike_state,
+                heat_correspondence=heat_correspondence,
+            )
     jax_trace = trace_manifold_reference(
         candidate_field,
         candidate_branch,
@@ -500,6 +558,8 @@ def validate_manifold_continuation_candidate(
             },
             xline_clearance_validation=xline_clearance_validation,
             heat_validation=heat_validation,
+            heat_strike_state=heat_strike_state,
+            heat_correspondence=heat_correspondence,
         )
     if not sample_refresh.accepted:
         return ManifoldContinuationValidationReport(
@@ -520,6 +580,8 @@ def validate_manifold_continuation_candidate(
             },
             xline_clearance_validation=xline_clearance_validation,
             heat_validation=heat_validation,
+            heat_strike_state=heat_strike_state,
+            heat_correspondence=heat_correspondence,
         )
 
     strike_validation = None
@@ -557,6 +619,8 @@ def validate_manifold_continuation_candidate(
                 diagnostics=strike_validation.diagnostics,
                 xline_clearance_validation=xline_clearance_validation,
                 heat_validation=heat_validation,
+                heat_strike_state=heat_strike_state,
+                heat_correspondence=heat_correspondence,
             )
         accepted_strike_target = strike_validation.accepted_target
 
@@ -601,6 +665,9 @@ def validate_manifold_continuation_candidate(
                     "production_unresolved_power_W": (
                         heat_validation.unresolved_power_W
                     ),
+                    "max_jax_cyna_heat_strike_deviation_m": (
+                        heat_correspondence.max_deviation_m
+                    ),
                 }
             ),
             **(
@@ -618,6 +685,8 @@ def validate_manifold_continuation_candidate(
         },
         xline_clearance_validation=xline_clearance_validation,
         heat_validation=heat_validation,
+        heat_strike_state=heat_strike_state,
+        heat_correspondence=heat_correspondence,
     )
 
 

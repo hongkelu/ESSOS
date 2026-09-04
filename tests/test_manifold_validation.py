@@ -290,7 +290,7 @@ def _heat_target(branch, *, maximum_heat_flux_W_m2=2.0e3):
     )
 
 
-def _analytic_strike_trace(parameters, hit_R):
+def _analytic_strike_trace(parameters, hit_R, *, phi_shift=0.0):
     rate, center_r, _center_z = map(float, parameters)
 
     def trace(
@@ -311,7 +311,7 @@ def _analytic_strike_trace(parameters, hit_R):
         assert direction == "+"
         phi = phi_start + np.log(
             (hit_R - center_r) / (R - center_r)
-        ) / rate
+        ) / rate + phi_shift
         return {
             "Lc_plus": np.abs(hit_R * (phi - phi_start)),
             "hit_plus": np.column_stack((np.full(R.size, hit_R), Z, phi)),
@@ -504,18 +504,20 @@ def test_candidate_validation_requires_and_applies_production_heat_gate():
     candidate = _ShiftedHyperbolicField(jnp.asarray(candidate_parameters))
     wall = _strike_wall()
 
-    def heat_config():
+    def heat_config(*, phi_shift=0.0):
         return ManifoldHeatValidationConfig(
             wall=wall,
             phi_edges=np.linspace(0.0, 2.0 * np.pi, 9),
             s_edges=np.linspace(0.0, 1.0, 17),
             maximum_hit_displacement_m=0.5,
+            jax_cyna_tolerance_m=2.0e-8,
             maximum_projection_distance_m=2.0e-4,
             max_turns=4,
             production_DPhi=0.01,
             production_trace_function=_analytic_strike_trace(
                 candidate_parameters,
                 1.02,
+                phi_shift=phi_shift,
             ),
         )
 
@@ -529,9 +531,11 @@ def test_candidate_validation_requires_and_applies_production_heat_gate():
     )
     assert accepted.accepted
     assert accepted.heat_validation.accepted
+    assert accepted.heat_correspondence.accepted
     assert accepted.heat_validation.all_labels_resolved
     assert accepted.diagnostics["production_unresolved_power_W"] == 0.0
     assert accepted.diagnostics["production_peak_heat_flux_W_m2"] < 2.0e3
+    assert accepted.diagnostics["max_jax_cyna_heat_strike_deviation_m"] < 2.0e-8
     assert accepted.accepted_state.heat_target_state is not None
     assert (
         accepted.accepted_state.heat_target_state.strike_matches
@@ -551,6 +555,19 @@ def test_candidate_validation_requires_and_applies_production_heat_gate():
     assert rejected.heat_validation is not None
     assert not rejected.heat_validation.accepted
     assert rejected.accepted_state is None
+
+    correspondence_rejected = _validate(
+        candidate,
+        state,
+        heat_validation_config=heat_config(phi_shift=0.01),
+    )
+    assert not correspondence_rejected.accepted
+    assert correspondence_rejected.heat_validation.accepted
+    assert not correspondence_rejected.heat_correspondence.accepted
+    assert correspondence_rejected.rejection_reason.startswith(
+        "heat_jax_cyna_correspondence:"
+    )
+    assert correspondence_rejected.correspondence is None
 
 
 def test_candidate_validation_stops_after_production_anchor_rejection():

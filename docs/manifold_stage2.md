@@ -208,7 +208,8 @@ step boundary.  Given a trial ESSOS field and an explicit production grid, it:
 4. when a heat target is carried, asks Cyna to retrace every labelled global
    first-wall hit and PyNA to reject unresolved power, label loss, wall-
    projection failure, excessive strike motion, or a production heat-flux
-   limit violation;
+   limit violation, then traces the refreshed local events with JAX and applies
+   the per-label bundle correspondence gate;
 5. traces the candidate branch directly through the live ESSOS field with JAX;
 6. asks PyNA to compare all available JAX/Cyna labels and refresh the one exact
    sample label under its displacement limit;
