@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -11,7 +13,12 @@ import jax.numpy as jnp
 
 pytest.importorskip("pyna.topo.jax_strike")
 
-from pyna.topo.manifold_correspondence import ManifoldBranchReference
+from pyna.topo.manifold_correspondence import (
+    ManifoldBranchReference,
+    ManifoldSampleMatch,
+    compare_jax_manifold_branch,
+    refresh_manifold_sample_match,
+)
 from pyna.topo.manifold_strike_contracts import (
     LocalWallPlane,
     ManifoldStrikeLabel,
@@ -25,6 +32,15 @@ from essos.manifold_heat_optimization import (
     manifold_heat_flux_state,
     manifold_heat_stage2_limit_loss,
     power_conserving_gaussian_heat_flux,
+)
+from essos.manifold_optimization import (
+    ManifoldContinuationSchedule,
+    ManifoldContinuationStage,
+    ManifoldContinuationState,
+    ManifoldStage2Target,
+    accept_manifold_continuation_stage,
+    compose_manifold_stage2_loss,
+    trace_manifold_reference,
 )
 
 
@@ -157,6 +173,25 @@ def _heat_target(parameters=PARAMETERS):
     )
 
 
+def _sample_target(heat_target):
+    branch = heat_target.branch_reference
+    label = branch.sample_label(1, 0)
+    point = branch.point(label)
+    return ManifoldStage2Target(
+        branch_reference=branch,
+        sample_match=ManifoldSampleMatch(
+            label=label,
+            point_RZ_m=point,
+            distance_m=0.0,
+            jax_seed_index=0,
+        ),
+        target_RZ_m=point,
+        rz_scales_m=np.array([0.01, 0.01]),
+        n_steps_per_span=64,
+        newton_iterations=4,
+    )
+
+
 def test_gaussian_deposition_conserves_power_even_for_remote_cells():
     strike_points = jnp.array([[0.0, 0.0, 0.0], [1.0, -0.5, 0.2]])
     powers = jnp.array([30.0, 70.0])
@@ -241,6 +276,127 @@ def test_heat_limit_loss_has_live_field_gradient_and_custom_loss():
     custom_value, custom_gradient = loss.value_and_grad(loss.starting_dofs)
     np.testing.assert_allclose(custom_value, value, rtol=2.0e-12)
     np.testing.assert_allclose(custom_gradient, gradient, rtol=2.0e-10)
+
+
+def test_continuation_composes_heat_weight_and_omits_zero_weight_trace():
+    heat_target = _heat_target()
+    sample_target = _sample_target(heat_target)
+    parameters = jnp.asarray(PARAMETERS)
+    field = _ShiftedHyperbolicField(parameters)
+    heat_weight = 0.35
+    active = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (ManifoldContinuationStage(name="heat", heat_weight=heat_weight),)
+        ),
+        sample_target,
+        heat_target_state=heat_target,
+    )
+    base = custom_loss(
+        lambda dynamic_field: dynamic_field.parameters[0] ** 2,
+        "field",
+    )
+    total = compose_manifold_stage2_loss(
+        base,
+        active,
+        dependencies={"field": field},
+    )
+    expected = lambda dynamic_parameters: (
+        dynamic_parameters[0] ** 2
+        + heat_weight
+        * manifold_heat_stage2_limit_loss(
+            _ShiftedHyperbolicField(dynamic_parameters),
+            target_state=heat_target,
+        )
+    )
+    value = total(total.starting_dofs)
+    gradient = total.grad(total.starting_dofs)
+    expected_value, expected_gradient = jax.value_and_grad(expected)(parameters)
+    np.testing.assert_allclose(value, expected_value, rtol=2.0e-12)
+    np.testing.assert_allclose(gradient, expected_gradient, rtol=2.0e-10)
+
+    without_target = replace(active, heat_target_state=None)
+    with pytest.raises(ValueError, match="heat_target_state"):
+        compose_manifold_stage2_loss(
+            base,
+            without_target,
+            dependencies={"field": field},
+        )
+    inactive = ManifoldContinuationState(
+        ManifoldContinuationSchedule((ManifoldContinuationStage(name="base"),)),
+        sample_target,
+    )
+    base_only = compose_manifold_stage2_loss(
+        base,
+        inactive,
+        dependencies={"field": field},
+    )
+    np.testing.assert_allclose(base_only(base_only.starting_dofs), parameters[0] ** 2)
+    with pytest.raises(ValueError, match="non-negative"):
+        ManifoldContinuationStage(name="bad-heat", heat_weight=-1.0)
+
+
+def test_continuation_requires_accepted_heat_refresh_and_fixed_physics():
+    heat_target = _heat_target()
+    sample_target = _sample_target(heat_target)
+    state = ManifoldContinuationState(
+        ManifoldContinuationSchedule(
+            (
+                ManifoldContinuationStage(name="base"),
+                ManifoldContinuationStage(name="heat", heat_weight=0.1),
+            )
+        ),
+        sample_target,
+        heat_target_state=heat_target,
+    )
+    field = _ShiftedHyperbolicField(jnp.asarray(PARAMETERS))
+    candidate_branch = heat_target.branch_reference
+    candidate_trace = trace_manifold_reference(
+        field,
+        candidate_branch,
+        n_steps_per_span=64,
+        newton_iterations=4,
+    )
+    correspondence = compare_jax_manifold_branch(
+        candidate_branch,
+        candidate_trace.generations,
+        absolute_tolerance_m=3.0e-12,
+    )
+    sample_refresh = refresh_manifold_sample_match(
+        sample_target.sample_match,
+        candidate_branch,
+        sample_target.target_RZ_m,
+        maximum_sample_displacement_m=1.0e-6,
+    )
+
+    with pytest.raises(ValueError, match="heat target requires accepted refresh"):
+        accept_manifold_continuation_stage(
+            state,
+            candidate_branch,
+            sample_refresh,
+            correspondence,
+        )
+    accepted = accept_manifold_continuation_stage(
+        state,
+        candidate_branch,
+        sample_refresh,
+        correspondence,
+        accepted_heat_target=heat_target,
+    )
+    assert accepted.stage.name == "heat"
+    assert accepted.heat_target_state is heat_target
+
+    changed_power = replace(
+        heat_target,
+        strike_powers_W=np.array([500.0, 500.0]),
+    )
+    with pytest.raises(ValueError, match="strike_powers_W"):
+        accept_manifold_continuation_stage(
+            state,
+            candidate_branch,
+            sample_refresh,
+            correspondence,
+            accepted_heat_target=changed_power,
+        )
 
 
 def test_heat_target_requires_aligned_labels_and_power_provenance():

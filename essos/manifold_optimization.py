@@ -16,6 +16,10 @@ import numpy as np
 
 from essos.losses import base_loss, composite_loss, custom_loss
 from essos.manifold import trace_manifold_branch
+from essos.manifold_heat_optimization import (
+    ManifoldHeatStage2Target,
+    make_manifold_heat_stage2_loss,
+)
 from essos.manifold_strike_optimization import (
     ManifoldStrikeStage2Target,
     make_manifold_strike_stage2_loss,
@@ -96,6 +100,7 @@ class ManifoldContinuationStage:
     manifold_weight: float = 0.0
     strike_weight: float = 0.0
     xline_clearance_weight: float = 0.0
+    heat_weight: float = 0.0
 
     def __post_init__(self) -> None:
         name = str(self.name).strip()
@@ -108,6 +113,7 @@ class ManifoldContinuationStage:
             "xline_clearance_weight",
             "manifold_weight",
             "strike_weight",
+            "heat_weight",
         ):
             object.__setattr__(
                 self,
@@ -125,6 +131,7 @@ class ManifoldContinuationStage:
                 self.xline_clearance_weight,
                 self.manifold_weight,
                 self.strike_weight,
+                self.heat_weight,
             )
         )
 
@@ -161,6 +168,7 @@ class ManifoldContinuationState:
     target_state: ManifoldStage2Target
     stage_index: int = 0
     strike_target_state: ManifoldStrikeStage2Target | None = None
+    heat_target_state: ManifoldHeatStage2Target | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, ManifoldContinuationSchedule):
@@ -173,6 +181,13 @@ class ManifoldContinuationState:
         ):
             raise TypeError(
                 "strike_target_state must be ManifoldStrikeStage2Target or None"
+            )
+        if self.heat_target_state is not None and not isinstance(
+            self.heat_target_state,
+            ManifoldHeatStage2Target,
+        ):
+            raise TypeError(
+                "heat_target_state must be ManifoldHeatStage2Target or None"
             )
         object.__setattr__(
             self,
@@ -476,6 +491,18 @@ def compose_manifold_stage2_loss(
         sources.append(strike_loss)
         weighted_terms.append(_scaled_loss(strike_loss, stage.strike_weight))
 
+    if stage.heat_weight > 0.0:
+        if continuation_state.heat_target_state is None:
+            raise ValueError(
+                "heat_target_state is required when heat_weight is positive"
+            )
+        heat_loss = make_manifold_heat_stage2_loss(
+            continuation_state.heat_target_state,
+            field_dependency=field_dependency,
+        )
+        sources.append(heat_loss)
+        weighted_terms.append(_scaled_loss(heat_loss, stage.heat_weight))
+
     total = base
     for term in weighted_terms:
         total = total + term
@@ -490,6 +517,7 @@ def accept_manifold_continuation_stage(
     correspondence: Any,
     *,
     accepted_strike_target: ManifoldStrikeStage2Target | None = None,
+    accepted_heat_target: ManifoldHeatStage2Target | None = None,
 ) -> ManifoldContinuationState:
     """Advance only after PyNA accepts label refresh and JAX/Cyna parity."""
 
@@ -523,6 +551,49 @@ def accept_manifold_continuation_stage(
         ):
             raise ValueError("accepted strike refresh changed the physical target")
         refreshed_strike_target = accepted_strike_target
+    active_heat_target = continuation_state.heat_target_state
+    if active_heat_target is None:
+        if accepted_heat_target is not None:
+            raise ValueError("cannot add a heat target during stage acceptance")
+        refreshed_heat_target = None
+    else:
+        if accepted_heat_target is None:
+            raise ValueError("the active heat target requires accepted refresh state")
+        if not isinstance(accepted_heat_target, ManifoldHeatStage2Target):
+            raise TypeError("accepted_heat_target must be ManifoldHeatStage2Target")
+        if accepted_heat_target.labels != active_heat_target.labels:
+            raise ValueError("accepted heat refresh changed the active labels")
+        if accepted_heat_target.power_provenance != active_heat_target.power_provenance:
+            raise ValueError("accepted heat refresh changed power provenance")
+        fixed_array_fields = (
+            "strike_powers_W",
+            "wall_cell_centers_xyz_m",
+            "wall_cell_areas_m2",
+        )
+        for attribute in fixed_array_fields:
+            if not np.array_equal(
+                getattr(accepted_heat_target, attribute),
+                getattr(active_heat_target, attribute),
+            ):
+                raise ValueError(
+                    f"accepted heat refresh changed {attribute}"
+                )
+        fixed_scalar_fields = (
+            "deposition_width_m",
+            "maximum_heat_flux_W_m2",
+            "heat_flux_scale_W_m2",
+        )
+        for attribute in fixed_scalar_fields:
+            if getattr(accepted_heat_target, attribute) != getattr(
+                active_heat_target,
+                attribute,
+            ):
+                raise ValueError(
+                    f"accepted heat refresh changed {attribute}"
+                )
+        if accepted_heat_target.branch_reference.label != candidate_branch.label:
+            raise ValueError("accepted heat refresh belongs to a different branch")
+        refreshed_heat_target = accepted_heat_target
     next_index = min(
         continuation_state.stage_index + 1,
         len(continuation_state.schedule) - 1,
@@ -532,6 +603,7 @@ def accept_manifold_continuation_stage(
         target_state=refreshed_target,
         stage_index=next_index,
         strike_target_state=refreshed_strike_target,
+        heat_target_state=refreshed_heat_target,
     )
 
 

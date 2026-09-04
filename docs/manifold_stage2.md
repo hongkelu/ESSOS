@@ -161,9 +161,10 @@ accepted snapshot.
 `ManifoldContinuationSchedule` separates the ordinary Stage-2 coil objective
 from the topology ramp.  Every named stage holds fixed weights for the
 return-map, combined X-line, periodic-X-line wall-clearance, exact-label
-manifold-sample, and exact-label wall-strike terms.  The caller chooses the
-dimensional normalization inside each objective and then chooses these
-dimensionless continuation weights; no universal numerical ramp is assumed.
+manifold-sample, exact-label wall-strike, and quantitative heat-load terms.  The
+caller chooses the dimensional normalization inside each objective and then
+chooses these dimensionless continuation weights; no universal numerical ramp
+is assumed.
 
 `compose_manifold_stage2_loss` keeps the supplied normal-field and engineering
 loss active with unit weight and adds only topology terms whose current weights
@@ -176,12 +177,18 @@ The manifold component is constructed internally from the active immutable
 target so it cannot accidentally use a different sample label.  A positive
 `strike_weight` likewise requires an immutable `strike_target_state` and builds
 the local-wall loss internally; no wall tracing is compiled when that weight is
-zero.
+zero.  A positive `heat_weight` similarly requires an immutable
+`heat_target_state`; an all-zero or pre-heat stage neither traces the strike
+bundle nor compiles the deposition model.
 
 After an inner solve, `accept_manifold_continuation_stage` calls the branch and
 sample target refresh and advances to the next stage only if it succeeds.  If
 the continuation carries a strike target, an independently accepted strike
 snapshot is mandatory and must preserve its label, metric, and physical target.
+If the continuation carries a heat target, advancement also requires an
+accepted refreshed heat snapshot with the same ordered labels, absolute powers
+and provenance, monitor cells, deposition width, and heat-flux limit.  Only the
+production branch, strikes, and local tangent planes may move.
 The function returns a new frozen state; an exception leaves the previous state
 unchanged.  Coil degrees of freedom and optimizer rollback remain with the
 calling ESSOS driver, while production retracing and acceptance decisions
