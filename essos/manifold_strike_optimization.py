@@ -9,7 +9,7 @@ with respect to the active coil field.
 from __future__ import annotations
 
 import operator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import jax.numpy as jnp
@@ -232,9 +232,79 @@ def make_manifold_strike_stage2_loss(
     )
 
 
+def refresh_manifold_strike_stage2_target(
+    target_state: ManifoldStrikeStage2Target,
+    candidate_branch: Any,
+    strike_refresh: Any,
+    correspondence: Any,
+    candidate_wall_plane: Any,
+) -> ManifoldStrikeStage2Target:
+    """Accept a fully PyNA-validated strike snapshot without relabelling."""
+
+    if not isinstance(target_state, ManifoldStrikeStage2Target):
+        raise TypeError("target_state must be ManifoldStrikeStage2Target")
+    (
+        ManifoldBranchReference,
+        _ManifoldStrikeMatch,
+        LocalWallPlane,
+    ) = _pyna_strike_contract_api()
+    from pyna.topo.manifold_strike_contracts import ManifoldStrikeRefreshReport
+    from pyna.topo.manifold_strike_correspondence import (
+        ManifoldStrikeCorrespondenceReport,
+    )
+
+    if not isinstance(candidate_branch, ManifoldBranchReference):
+        raise TypeError("candidate_branch must be a PyNA ManifoldBranchReference")
+    if not isinstance(strike_refresh, ManifoldStrikeRefreshReport):
+        raise TypeError("strike_refresh must be a PyNA ManifoldStrikeRefreshReport")
+    if not isinstance(correspondence, ManifoldStrikeCorrespondenceReport):
+        raise TypeError(
+            "correspondence must be a PyNA ManifoldStrikeCorrespondenceReport"
+        )
+    if not isinstance(candidate_wall_plane, LocalWallPlane):
+        raise TypeError("candidate_wall_plane must be a PyNA LocalWallPlane")
+    if not strike_refresh.accepted or strike_refresh.candidate_match is None:
+        reason = strike_refresh.rejection_reason or "unknown"
+        raise ValueError(f"PyNA rejected manifold strike refresh: {reason}")
+    if not correspondence.accepted:
+        reason = correspondence.rejection_reason or "unknown"
+        raise ValueError(f"PyNA rejected JAX/Cyna strike correspondence: {reason}")
+
+    previous_match = strike_refresh.previous_match
+    candidate_match = strike_refresh.candidate_match
+    if previous_match.label != target_state.strike_match.label or not np.allclose(
+        previous_match.point_RZPhi_m_rad,
+        target_state.strike_match.point_RZPhi_m_rad,
+        rtol=1.0e-12,
+        atol=1.0e-14,
+    ):
+        raise ValueError("strike refresh does not start from the active target")
+    if candidate_match.label.branch_label != candidate_branch.label:
+        raise ValueError("candidate strike belongs to a different manifold branch")
+    if correspondence.label != candidate_match.label:
+        raise ValueError("strike correspondence belongs to a different label")
+    if not np.allclose(
+        correspondence.production_coordinates_m,
+        candidate_match.distance_coordinates_m,
+        rtol=1.0e-12,
+        atol=1.0e-14,
+    ):
+        raise ValueError("strike correspondence uses a different production hit")
+    if candidate_wall_plane.strike_label != candidate_match.label:
+        raise ValueError("candidate wall plane belongs to a different strike label")
+
+    return replace(
+        target_state,
+        branch_reference=candidate_branch,
+        strike_match=candidate_match,
+        wall_plane=candidate_wall_plane,
+    )
+
+
 __all__ = [
     "ManifoldStrikeStage2Target",
     "make_manifold_strike_stage2_loss",
     "manifold_strike_stage2_target_loss",
+    "refresh_manifold_strike_stage2_target",
     "trace_manifold_strike_reference",
 ]

@@ -96,6 +96,15 @@ sequential model: Cyna still owns global first-wall selection, branch identity,
 connection length, and the refreshed plane after every accepted outer step.
 The JAX loss never searches for a new hit or silently changes labels.
 
+`validate_manifold_strike_candidate` performs that outer strike transaction
+after the candidate manifold branch has passed its production refresh.  It
+rebuilds the branch's ordered strike-seed bundle, asks Cyna for global first
+wall hits, refreshes the exact sparse seed-order label, projects the accepted
+hit to a new local wall plane, and compares the live JAX event with Cyna using
+the selected `rz` or `xyz` metric.  A missing hit, excessive motion, failed
+periodic root or wall event, event-window escape, or excessive JAX/Cyna error
+returns a rejected report with no refreshed target.
+
 ## Immutable target state and accepted refreshes
 
 `ManifoldStage2Target` is the boundary between one outer topology refresh and
