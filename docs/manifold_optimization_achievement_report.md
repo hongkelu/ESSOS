@@ -1,5 +1,12 @@
 # Manifold-aware coil optimization: achievement report
 
+Update, 2026-09-10: the pre-strike leg-clearance milestone described below as
+uncommitted work is now implemented and verified. See the
+[leg-clearance achievement report](manifold_leg_clearance_achievement_report.md)
+for current APIs, production gates, physical evidence, and the wall-vertex
+sign correction discovered during integration. The remainder of this document
+preserves the earlier snapshot and its original branch/test counts.
+
 Snapshot date: 2026-09-10 (Asia/Shanghai)
 
 ## Executive summary

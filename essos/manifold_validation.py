@@ -30,6 +30,10 @@ from essos.manifold_strike_validation import (
     ManifoldStrikeValidationConfig,
     validate_manifold_strike_candidate,
 )
+from essos.manifold_leg_validation import (
+    ManifoldLegValidationConfig,
+    validate_manifold_leg_candidate,
+)
 
 
 def _pyna_validation_api():
@@ -174,6 +178,7 @@ class ManifoldContinuationValidationReport:
     heat_validation: Any | None = None
     heat_strike_state: Any | None = None
     heat_correspondence: Any | None = None
+    leg_validation: Any | None = None
 
     def __post_init__(self) -> None:
         accepted = bool(self.accepted)
@@ -181,6 +186,16 @@ class ManifoldContinuationValidationReport:
             self.rejection_reason
         )
         if accepted:
+            if (
+                self.accepted_state is not None
+                and self.accepted_state.leg_target_state is not None
+            ):
+                if (
+                    self.leg_validation is None or not self.leg_validation.accepted
+                    or self.leg_validation.accepted_target
+                    is not self.accepted_state.leg_target_state
+                ):
+                    raise ValueError("accepted leg-aware validation requires its leg gate")
             if (
                 self.production_refresh is None
                 or not bool(getattr(self.production_refresh, "accepted", False))
@@ -275,6 +290,7 @@ def validate_manifold_continuation_candidate(
     strike_validation_config: ManifoldStrikeValidationConfig | None = None,
     xline_clearance_config: XLineClearanceValidationConfig | None = None,
     heat_validation_config: ManifoldHeatValidationConfig | None = None,
+    leg_validation_config: ManifoldLegValidationConfig | None = None,
 ) -> ManifoldContinuationValidationReport:
     """Validate a trial field and advance only after all PyNA gates pass.
 
@@ -286,6 +302,16 @@ def validate_manifold_continuation_candidate(
 
     if not isinstance(continuation_state, ManifoldContinuationState):
         raise TypeError("continuation_state must be ManifoldContinuationState")
+    if (
+        continuation_state.stage.leg_clearance_weight > 0
+        and continuation_state.leg_target_state is None
+    ):
+        raise ValueError("an active leg clearance term requires leg_target_state")
+    if continuation_state.leg_target_state is None:
+        if leg_validation_config is not None:
+            raise ValueError("leg_validation_config requires an active leg target")
+    elif not isinstance(leg_validation_config, ManifoldLegValidationConfig):
+        raise TypeError("an active leg target requires ManifoldLegValidationConfig")
     if continuation_state.strike_target_state is None:
         if strike_validation_config is not None:
             raise ValueError("strike_validation_config requires an active strike target")
@@ -624,6 +650,34 @@ def validate_manifold_continuation_candidate(
             )
         accepted_strike_target = strike_validation.accepted_target
 
+    leg_validation = None
+    accepted_leg_target = None
+    if continuation_state.leg_target_state is not None:
+        leg_validation = validate_manifold_leg_candidate(
+            candidate_field, production_field, candidate_branch,
+            continuation_state.leg_target_state, leg_validation_config,
+        )
+        if not leg_validation.accepted:
+            return ManifoldContinuationValidationReport(
+                production_refresh=production_refresh,
+                correspondence=correspondence, sample_refresh=sample_refresh,
+                accepted_state=None, accepted=False,
+                rejection_reason=f"leg_validation:{leg_validation.rejection_reason}",
+                diagnostics={
+                    "minimum_leg_clearance_m": (
+                        leg_validation.production.minimum_clearance_m
+                    ),
+                    "required_minimum_leg_clearance_m": (
+                        continuation_state.leg_target_state.minimum_clearance_m
+                    ),
+                },
+                strike_validation=strike_validation,
+                xline_clearance_validation=xline_clearance_validation,
+                heat_validation=heat_validation, heat_strike_state=heat_strike_state,
+                heat_correspondence=heat_correspondence, leg_validation=leg_validation,
+            )
+        accepted_leg_target = leg_validation.accepted_target
+
     accepted_state = accept_manifold_continuation_stage(
         continuation_state,
         candidate_branch,
@@ -631,6 +685,7 @@ def validate_manifold_continuation_candidate(
         correspondence,
         accepted_strike_target=accepted_strike_target,
         accepted_heat_target=accepted_heat_target,
+        accepted_leg_target=accepted_leg_target,
     )
     return ManifoldContinuationValidationReport(
         production_refresh=production_refresh,
@@ -639,10 +694,21 @@ def validate_manifold_continuation_candidate(
         accepted_state=accepted_state,
         accepted=True,
         strike_validation=strike_validation,
+        leg_validation=leg_validation,
         diagnostics={
             "anchor_displacement_m": production_refresh.anchor_displacement_m,
             "sample_displacement_m": sample_refresh.sample_displacement_m,
             "max_jax_cyna_deviation_m": correspondence.max_deviation_m,
+            **(
+                {} if leg_validation is None else {
+                    "minimum_leg_clearance_m": (
+                        leg_validation.production.minimum_clearance_m
+                    ),
+                    "minimum_inner_leg_clearance_m": float(np.min(
+                        np.asarray(leg_validation.inner_state.signed_clearance_m)
+                    )),
+                }
+            ),
             **(
                 {}
                 if xline_clearance_validation is None
@@ -691,6 +757,7 @@ def validate_manifold_continuation_candidate(
 
 
 __all__ = [
+    "ManifoldLegValidationConfig",
     "ManifoldContinuationValidationReport",
     "ManifoldHeatValidationConfig",
     "XLineClearanceValidationConfig",

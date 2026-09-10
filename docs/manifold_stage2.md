@@ -194,6 +194,88 @@ unchanged.  Coil degrees of freedom and optimizer rollback remain with the
 calling ESSOS driver, while production retracing and acceptance decisions
 remain with PyNA.
 
+## Pre-strike leg clearance
+
+`ManifoldLegStage2Target` stores a complete ordered bundle of exact strike
+labels, local wall planes, integration controls, a static JAX wall-distance
+callback, and the physical clearance requirements. It has no heat-power or
+wall-deposition dependencies. Optional non-negative `strike_weights` affect
+only the smooth objective; even a zero-weight leg must pass production
+validation. The target copies those weights into an immutable tuple.
+
+The signed-distance callback accepts Cartesian `(X,Y,Z)` and returns metres,
+positive inside the allowed vessel. It and its captured wall geometry must
+remain unchanged during an inner solve. Use the same physical wall for this
+smooth model and the production validator.
+
+For `N = wall_n_steps`, the inner loss retains fixed sample indices satisfying
+`index / N < 1 - terminal_exclusion_fraction`, subsampled by `sample_stride`.
+The excluded fraction is a fraction of the **signed toroidal-angle span**, not
+arc length. The hit endpoint is always excluded. The loss is half the weighted
+mean of each leg's mean squared normalized clearance violation. Fixed indices
+keep the objective differentiable even as the hit angle moves.
+
+```python
+from essos.manifold_leg_optimization import ManifoldLegStage2Target
+from essos.manifold_leg_validation import ManifoldLegValidationConfig
+
+leg_target = ManifoldLegStage2Target(
+    branch_reference=accepted_branch,
+    strike_matches=accepted_matches,  # complete branch seed-order identity
+    wall_planes=accepted_planes,
+    wall_signed_distance=wall_signed_distance,
+    minimum_clearance_m=1e-3,
+    clearance_scale_m=1e-3,
+    terminal_exclusion_fraction=0.2,
+    maximum_phi_shift=0.1,
+)
+leg_validation = ManifoldLegValidationConfig(
+    wall=production_wall,
+    maximum_hit_displacement_m=2e-3,
+    jax_cyna_tolerance_m=5e-4,
+    maximum_endpoint_error_m=1e-5,
+    production_DPhi=0.005,
+)
+```
+
+These numbers illustrate configuration, not universal tolerances. Carry the
+target as `ManifoldContinuationState.leg_target_state`, using the same branch
+object as the sample target, and set `leg_clearance_weight` on the desired
+stages. `compose_manifold_stage2_loss` constructs the loss from that snapshot.
+A zero weight skips inner leg tracing completely. Pass `leg_validation_config`
+to `validate_manifold_continuation_candidate`; carrying a leg target requires
+its acceptance gate even during a zero-weight stage, as for strike/heat targets.
+
+PyNA's `validate_manifold_leg_clearance` independently:
+
+1. traces global first-wall hits for every exact labelled seed;
+2. rejects missing hits, excessive strike motion, and unwrapped phase changes
+   outside the trust window (including same-position hits on another turn);
+3. samples each full Cyna seed-to-hit trajectory, checking signed phase order,
+   launch identity, domain survival, span coverage, and endpoint agreement;
+4. projects retained interior points onto the continuous wall, determines the
+   sign by polygon containment in the periodic interpolated section, and checks
+   every leg's minimum clearance;
+5. rebuilds wall planes only for valid strikes.
+
+ESSOS then checks the refreshed JAX local events against those production
+strikes and independently enforces the smooth inner clearance margin. The
+transaction returns `leg_validation` with production per-label reports, JAX
+state, correspondence, and an accepted target only if all gates pass. Rejection
+reasons are prefixed `leg_validation:` and use the existing backtracking path.
+Stage acceptance preserves ordered labels, distance modes, wall callback,
+weights, clearance requirements, exclusion fraction, and integration settings.
+
+Clearance is a **sampled** certificate. Continuous wall projection does not
+prove clearance between trajectory samples. Converge Cyna `production_DPhi`,
+JAX `wall_n_steps`/`sample_stride`, the field grid, and wall resolution before
+interpreting a margin physically. The terminal exclusion permits the intended
+wall approach; it never disables the independent global first-hit check.
+The production distance uses the closest poloidal wall segment at each query
+angle, as in the existing X-line gate. It is not a global nearest-surface
+distance in three dimensions. Polygon containment determines its sign, avoiding
+normal-dot-product ambiguity at wall vertices.
+
 ## Candidate validation transaction
 
 `validate_manifold_continuation_candidate` connects the pieces at an outer
@@ -215,7 +297,10 @@ step boundary.  Given a trial ESSOS field and an explicit production grid, it:
    sample label under its displacement limit;
 7. when a strike target is active, runs the global Cyna wall trace, exact strike
    refresh, local-plane rebuild, and metric-specific JAX/Cyna strike gate; and
-8. returns a new continuation state only when every required gate accepts.
+8. when a leg target is carried, runs the independent production first-hit and
+   leg-clearance gate, rebuilds its local events, checks JAX/Cyna strike parity,
+   and enforces the smooth inner clearance margin; and
+9. returns a new continuation state only when every required gate accepts.
 
 The returned `ManifoldContinuationValidationReport` retains the individual
 PyNA reports and a stable rejection reason.  A rejected report contains no
@@ -317,9 +402,10 @@ radial interpolant of the regression wall has zero hinge violation at the
 Cyna/PyNA gate traces all five field periods against the full wall: the
 accepted candidate has about `1.32 mm` minimum continuous-section clearance
 at the converged output spacing and `0.54 micrometres` orbit-closure error.
-Wall projections are rotated back
-to the signed, unwrapped orbit phase before their inside/outside sign is used,
-which is essential after crossing an `nfp=2` field-period seam.
+Native projection signs use polygon containment in the periodic interpolated
+section, preserving inside/outside classification across `nfp=2` seams and at
+notch vertices. Local wall-plane points and normals are still rotated back to
+the signed, unwrapped strike phase.
 
 It also carries the first physical-coil heat transaction with a deliberately
 prescribed `1 W` regression load on seed order 30.  This absolute input is
@@ -331,10 +417,18 @@ independent PyNA/Cyna gate retraces the global hit, deposits exactly `1 W` on a
 `1e5 W/m^2` regression limit, and keeps the bundled local-event discrepancy
 below `1 mm`.
 
+The step now also passes pre-strike leg clearance: the production minimum is
+about `30.91 mm` at a requested `0.5 mm` margin, excluding the final 20% of the
+toroidal-angle span. Halving production integration/output spacing changes
+the nominal minimum by about `1.1 nm`. An excessive `40 mm` requirement is
+explicitly rejected. See the
+[clearance milestone report](manifold_leg_clearance_achievement_report.md)
+for test evidence and the distinct inner/production distance definitions.
+
 This closes the first physical QA coil/wall and three-dimensional strike
 checkpoint, including a true QA modular-coil shape step and periodic-X-line
 clearance plus an end-to-end prescribed-power heat gate.  A transport-derived
-QA power allocation, pre-strike manifold-leg clearance, and multi-DOF
+QA power allocation and multi-DOF
 engineering-constrained optimization remain subsequent milestones.
 
 ## Optimizer proposal rollback

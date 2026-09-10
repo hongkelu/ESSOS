@@ -16,6 +16,11 @@ import numpy as np
 
 from essos.losses import base_loss, composite_loss, custom_loss
 from essos.manifold import trace_manifold_branch
+from essos.manifold_leg_optimization import (
+    ManifoldLegStage2Target,
+    make_manifold_leg_stage2_loss,
+    require_same_leg_configuration,
+)
 from essos.manifold_heat_optimization import (
     ManifoldHeatStage2Target,
     make_manifold_heat_stage2_loss,
@@ -101,6 +106,7 @@ class ManifoldContinuationStage:
     strike_weight: float = 0.0
     xline_clearance_weight: float = 0.0
     heat_weight: float = 0.0
+    leg_clearance_weight: float = 0.0
 
     def __post_init__(self) -> None:
         name = str(self.name).strip()
@@ -114,6 +120,7 @@ class ManifoldContinuationStage:
             "manifold_weight",
             "strike_weight",
             "heat_weight",
+            "leg_clearance_weight",
         ):
             object.__setattr__(
                 self,
@@ -132,6 +139,7 @@ class ManifoldContinuationStage:
                 self.manifold_weight,
                 self.strike_weight,
                 self.heat_weight,
+                self.leg_clearance_weight,
             )
         )
 
@@ -169,12 +177,18 @@ class ManifoldContinuationState:
     stage_index: int = 0
     strike_target_state: ManifoldStrikeStage2Target | None = None
     heat_target_state: ManifoldHeatStage2Target | None = None
+    leg_target_state: ManifoldLegStage2Target | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, ManifoldContinuationSchedule):
             raise TypeError("schedule must be ManifoldContinuationSchedule")
         if not isinstance(self.target_state, ManifoldStage2Target):
             raise TypeError("target_state must be ManifoldStage2Target")
+        if self.leg_target_state is not None:
+            if not isinstance(self.leg_target_state, ManifoldLegStage2Target):
+                raise TypeError("leg_target_state must be ManifoldLegStage2Target or None")
+            if self.leg_target_state.branch_reference is not self.target_state.branch_reference:
+                raise ValueError("leg target must share the active branch snapshot")
         if self.strike_target_state is not None and not isinstance(
             self.strike_target_state,
             ManifoldStrikeStage2Target,
@@ -491,6 +505,15 @@ def compose_manifold_stage2_loss(
         sources.append(strike_loss)
         weighted_terms.append(_scaled_loss(strike_loss, stage.strike_weight))
 
+    if stage.leg_clearance_weight > 0.0:
+        if continuation_state.leg_target_state is None:
+            raise ValueError("leg_target_state is required when leg_clearance_weight is positive")
+        leg_loss = make_manifold_leg_stage2_loss(
+            continuation_state.leg_target_state, field_dependency=field_dependency,
+        )
+        sources.append(leg_loss)
+        weighted_terms.append(_scaled_loss(leg_loss, stage.leg_clearance_weight))
+
     if stage.heat_weight > 0.0:
         if continuation_state.heat_target_state is None:
             raise ValueError(
@@ -518,6 +541,7 @@ def accept_manifold_continuation_stage(
     *,
     accepted_strike_target: ManifoldStrikeStage2Target | None = None,
     accepted_heat_target: ManifoldHeatStage2Target | None = None,
+    accepted_leg_target: ManifoldLegStage2Target | None = None,
 ) -> ManifoldContinuationState:
     """Advance only after PyNA accepts label refresh and JAX/Cyna parity."""
 
@@ -594,6 +618,16 @@ def accept_manifold_continuation_stage(
         if accepted_heat_target.branch_reference.label != candidate_branch.label:
             raise ValueError("accepted heat refresh belongs to a different branch")
         refreshed_heat_target = accepted_heat_target
+    active_leg_target = continuation_state.leg_target_state
+    if active_leg_target is None:
+        if accepted_leg_target is not None:
+            raise ValueError("cannot add a leg target during stage acceptance")
+    else:
+        if accepted_leg_target is None:
+            raise ValueError("the active leg target requires accepted refresh state")
+        require_same_leg_configuration(active_leg_target, accepted_leg_target)
+        if accepted_leg_target.branch_reference is not candidate_branch:
+            raise ValueError("accepted leg refresh must use the candidate branch snapshot")
     next_index = min(
         continuation_state.stage_index + 1,
         len(continuation_state.schedule) - 1,
@@ -604,6 +638,7 @@ def accept_manifold_continuation_stage(
         stage_index=next_index,
         strike_target_state=refreshed_strike_target,
         heat_target_state=refreshed_heat_target,
+        leg_target_state=accepted_leg_target,
     )
 
 

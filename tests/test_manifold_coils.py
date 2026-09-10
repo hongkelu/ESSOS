@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import numpy as np
 import pytest
@@ -31,6 +31,8 @@ from pyna.toroidal.geometry import ToroidalWall
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
 from essos.manifold_driver import validated_manifold_backtracking_step
+from essos.manifold_leg_optimization import ManifoldLegStage2Target
+from essos.manifold_leg_validation import ManifoldLegValidationConfig, validate_manifold_leg_candidate
 from essos.manifold import (
     essos_field_to_pyna_cylindrical_grid,
     periodic_xline_state,
@@ -155,6 +157,7 @@ def _tokamak_production_branch(
     seed_distances=(1.0e-5, 3.0e-5),
     seed_orders=(2, 5),
     n_generations=2,
+    stability="unstable",
 ):
     xline = periodic_xline_state(
         field,
@@ -202,7 +205,7 @@ def _tokamak_production_branch(
     )[0]
     return manifold_branch_reference_from_trace(
         payload,
-        stability="unstable",
+        stability=stability,
         seed_side=1,
         n_generations=n_generations,
     )
@@ -308,6 +311,10 @@ def _tokamak_continuation_state(
     )
 
 
+def _tokamak_leg_signed_distance(point):
+    return .15 - jnp.hypot(jnp.hypot(point[0], point[1]) - 1.5, point[2] + .1)
+
+
 def _tokamak_strike_problem(nominal_field, desired_field):
     production_field = _tokamak_production_field(nominal_field)
     branch = _tokamak_production_branch(
@@ -334,16 +341,25 @@ def _tokamak_strike_problem(nominal_field, desired_field):
         ),
     )
     sample_state = _tokamak_continuation_state(branch, stage_index=1)
+    leg_target = ManifoldLegStage2Target(
+        **{item.name: getattr(strike_target, item.name)
+           for item in fields(ManifoldLegStage2Target) if hasattr(strike_target, item.name)},
+        strike_matches=(strike_target.strike_match,), wall_planes=(strike_target.wall_plane,),
+        wall_signed_distance=_tokamak_leg_signed_distance,
+        minimum_clearance_m=1.0e-3, clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=.2,
+    )
     continuation = ManifoldContinuationState(
         ManifoldContinuationSchedule(
             (
                 ManifoldContinuationStage(name="base"),
-                ManifoldContinuationStage(name="strike", strike_weight=1.0),
+                ManifoldContinuationStage(name="strike", strike_weight=1.0, leg_clearance_weight=.1),
             )
         ),
         sample_state.target_state,
         stage_index=1,
         strike_target_state=strike_target,
+        leg_target_state=leg_target,
     )
     strike_config = ManifoldStrikeValidationConfig(
         wall=wall,
@@ -362,6 +378,14 @@ def _validate_tokamak_candidate(
     *,
     strike_validation_config=None,
 ):
+    leg_config = None
+    if continuation.leg_target_state is not None:
+        leg_config = ManifoldLegValidationConfig(
+            wall=strike_validation_config.wall, maximum_hit_displacement_m=2.0e-3,
+            jax_cyna_tolerance_m=5.0e-4, maximum_endpoint_error_m=1.0e-5,
+            maximum_projection_distance_m=1.0e-4, max_turns=20,
+            production_DPhi=float(MAP_SPAN) / 128,
+        )
     return validate_manifold_continuation_candidate(
         field,
         continuation,
@@ -377,6 +401,7 @@ def _validate_tokamak_candidate(
         production_DPhi=float(MAP_SPAN) / 64,
         require_complete_correspondence=True,
         strike_validation_config=strike_validation_config,
+        leg_validation_config=leg_config,
     )
 
 
@@ -715,6 +740,8 @@ def test_bounded_pf_coil_height_step_reaches_a_first_wall_strike():
     assert float(final_loss) < 1.0e-5 * float(initial_loss)
     accepted = result.attempts[-1].validation
     assert accepted.strike_validation.accepted
+    assert accepted.leg_validation.accepted
+    assert accepted.leg_validation.production.minimum_clearance_m >= 1.0e-3
     assert accepted.production_refresh.anchor_displacement_m < 2.0e-3
     assert accepted.strike_validation.correspondence.deviation_m < 5.0e-4
     assert accepted.strike_validation.strike_refresh.hit_displacement_m < 2.0e-3
@@ -722,3 +749,45 @@ def test_bounded_pf_coil_height_step_reaches_a_first_wall_strike():
         result.continuation_state.strike_target_state.label
         == strike_target.label
     )
+
+
+def test_tokamak_stable_leg_clearance_and_rejected_margin():
+    _require_cyna()
+    field = _physical_field(1.)
+    production = _tokamak_production_field(field)
+    branch = _tokamak_production_branch(
+        field, production_field=production, seed_distances=(1e-2,),
+        seed_orders=(11,), n_generations=1, stability="stable",
+    )
+    wall = _tokamak_wall()
+    strike = _tokamak_strike_target(branch, production, wall)
+    target = ManifoldLegStage2Target(
+        **{item.name: getattr(strike, item.name)
+           for item in fields(ManifoldLegStage2Target) if hasattr(strike, item.name)},
+        strike_matches=(strike.strike_match,), wall_planes=(strike.wall_plane,),
+        wall_signed_distance=_tokamak_leg_signed_distance,
+        minimum_clearance_m=1e-3, clearance_scale_m=1e-3,
+        terminal_exclusion_fraction=.2,
+    )
+    config = ManifoldLegValidationConfig(
+        wall=wall, maximum_hit_displacement_m=2e-3,
+        jax_cyna_tolerance_m=5e-4, maximum_endpoint_error_m=1e-5,
+        maximum_projection_distance_m=1e-4, max_turns=20,
+        production_DPhi=float(MAP_SPAN) / 128,
+    )
+    accepted = validate_manifold_leg_candidate(field, production, branch, target, config)
+    assert accepted.accepted, accepted.rejection_reason
+    assert accepted.production.legs[0].label.direction == "-"
+    assert np.all(np.diff(accepted.production.legs[0].point_RZPhi_m_rad[:, 2]) < 0)
+    refined = validate_manifold_leg_candidate(
+        field, production, branch, target,
+        replace(config, production_DPhi=config.production_DPhi / 2),
+    )
+    assert refined.accepted, refined.rejection_reason
+    assert abs(accepted.production.minimum_clearance_m - refined.production.minimum_clearance_m) < 5e-4
+    rejected = validate_manifold_leg_candidate(
+        field, production, branch, replace(target, minimum_clearance_m=.15), config,
+    )
+    assert not rejected.accepted
+    assert rejected.rejection_reason == "production_leg_clearance_below_limit"
+    assert rejected.accepted_target is None

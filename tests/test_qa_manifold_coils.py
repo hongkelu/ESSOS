@@ -9,7 +9,7 @@ notch to a labelled unstable branch.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +35,7 @@ from pyna.topo.manifold_strike import (
 from pyna.topo.manifold_strike_correspondence import (
     compare_jax_manifold_strike,
 )
+from pyna.topo.manifold_leg_clearance import validate_manifold_leg_clearance
 from pyna.topo.toroidal import FixedPoint
 from pyna.toroidal.control.strike_heat import trace_wall_strikes_field
 from pyna.toroidal.flt import (
@@ -48,6 +49,8 @@ from pyna.toroidal.geometry import ToroidalWall
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
 from essos.manifold_driver import validated_manifold_backtracking_step
+from essos.manifold_leg_optimization import ManifoldLegStage2Target
+from essos.manifold_leg_validation import ManifoldLegValidationConfig
 from essos.manifold import (
     essos_field_to_pyna_cylindrical_grid,
     fixed_phi_poincare_map_from_coils,
@@ -593,6 +596,46 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         newton_damping=0.8,
         bphi_floor=1.0e-10,
     )
+    leg_target = ManifoldLegStage2Target(
+        **{item.name: getattr(heat_target, item.name)
+           for item in fields(ManifoldLegStage2Target) if hasattr(heat_target, item.name)},
+        wall_signed_distance=_qa_wall_radial_signed_distance(wall),
+        minimum_clearance_m=5.0e-4, clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=0.2, sample_stride=4,
+    )
+    leg_config = ManifoldLegValidationConfig(
+        wall=wall, maximum_hit_displacement_m=2.0e-3,
+        jax_cyna_tolerance_m=1.5e-3, maximum_endpoint_error_m=5.0e-5,
+        maximum_projection_distance_m=4.0e-3, max_turns=3,
+        production_DPhi=QA_WALL_DPHI,
+    )
+    production_leg_options = dict(
+        previous_matches=leg_target.strike_matches,
+        required_minimum_clearance_m=leg_target.minimum_clearance_m,
+        terminal_exclusion_fraction=leg_target.terminal_exclusion_fraction,
+        maximum_hit_displacement_m=leg_config.maximum_hit_displacement_m,
+        maximum_hit_phase_shift_rad=leg_target.maximum_phi_shift,
+        maximum_endpoint_error_m=leg_config.maximum_endpoint_error_m,
+        maximum_projection_distance_m=leg_config.maximum_projection_distance_m,
+        max_turns=leg_config.max_turns,
+    )
+    baseline_leg = validate_manifold_leg_clearance(
+        production_field, branch, wall, DPhi=QA_WALL_DPHI,
+        **production_leg_options,
+    )
+    refined_leg = validate_manifold_leg_clearance(
+        production_field, branch, wall, DPhi=QA_WALL_DPHI / 2,
+        **production_leg_options,
+    )
+    assert baseline_leg.accepted, (baseline_leg.rejection_reason, baseline_leg.minimum_clearance_m)
+    assert refined_leg.accepted, (refined_leg.rejection_reason, refined_leg.minimum_clearance_m)
+    assert abs(baseline_leg.minimum_clearance_m - refined_leg.minimum_clearance_m) < 1e-4
+    rejected_leg = validate_manifold_leg_clearance(
+        production_field, branch, wall, DPhi=QA_WALL_DPHI,
+        **{**production_leg_options, "required_minimum_clearance_m": .04},
+    )
+    assert not rejected_leg.accepted
+    assert rejected_leg.rejection_reason == "production_leg_clearance_below_limit"
     continuation = ManifoldContinuationState(
         ManifoldContinuationSchedule(
             (
@@ -602,6 +645,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
                     strike_weight=1.0,
                     xline_clearance_weight=0.1,
                     heat_weight=0.1,
+                    leg_clearance_weight=0.1,
                 ),
             )
         ),
@@ -609,6 +653,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         stage_index=1,
         strike_target_state=shape_target,
         heat_target_state=heat_target,
+        leg_target_state=leg_target,
     )
     strike_config = ManifoldStrikeValidationConfig(
         wall=wall,
@@ -722,6 +767,7 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
             strike_validation_config=strike_config,
             xline_clearance_config=xline_clearance_config,
             heat_validation_config=heat_validation_config,
+            leg_validation_config=leg_config,
         )
 
     initial_loss = manifold_strike_stage2_target_loss(
@@ -759,7 +805,10 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
         np.max(np.abs(final_lengths - nominal_lengths))
     )
 
-    assert result.accepted
+    assert result.accepted, [
+        (a.validation.rejection_reason, a.validation.diagnostics)
+        for a in result.attempts
+    ]
     assert result.step_fraction == 1.0
     assert abs(result.dofs[0] - desired_shape_dof) < 1.0e-8
     assert float(final_loss) < 1.0e-5 * float(initial_loss)
@@ -786,6 +835,16 @@ def test_qa_period_five_xline_has_differentiable_multi_turn_strike():
     )
     assert accepted.strike_validation.accepted
     assert accepted.heat_validation.accepted
+    assert accepted.leg_validation.accepted
+    assert accepted.leg_validation.production.minimum_clearance_m >= leg_target.minimum_clearance_m
+    assert np.min(np.asarray(accepted.leg_validation.inner_state.signed_clearance_m)) >= leg_target.minimum_clearance_m
+    assert result.continuation_state.leg_target_state.labels == leg_target.labels
+    print(
+        "QA leg clearance:",
+        "production_m=", accepted.leg_validation.production.minimum_clearance_m,
+        "inner_m=", float(np.min(np.asarray(accepted.leg_validation.inner_state.signed_clearance_m))),
+        "refinement_change_m=", abs(baseline_leg.minimum_clearance_m - refined_leg.minimum_clearance_m),
+    )
     assert accepted.heat_validation.unresolved_power_W == pytest.approx(0.0)
     assert accepted.heat_validation.peak_heat_flux_W_m2 < 1.0e5
     assert accepted.heat_correspondence.accepted
