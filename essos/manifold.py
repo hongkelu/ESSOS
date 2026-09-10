@@ -241,6 +241,19 @@ def _pyna_strike_bundle_api():
     return trace_manifold_strike_bundle
 
 
+def _pyna_strike_trajectory_bundle_api():
+    try:
+        from pyna.topo.jax_strike import (
+            trace_manifold_strike_bundle_trajectories,
+        )
+    except ImportError as exc:  # pragma: no cover - depends on installation
+        raise ImportError(
+            "ESSOS strike-leg objectives require PyNA's optional-JAX "
+            "topology backend"
+        ) from exc
+    return trace_manifold_strike_bundle_trajectories
+
+
 class ManifoldBranchTrace(NamedTuple):
     """Differentiable samples for one outer-identified manifold branch."""
 
@@ -734,6 +747,46 @@ def trace_manifold_wall_strike_bundle(
     )
 
 
+def trace_manifold_wall_strike_bundle_trajectories(
+    field: Any,
+    branch_reference: Any,
+    strike_matches: Any,
+    wall_planes: Any,
+    *,
+    n_steps_per_span: int = 256,
+    xline_newton_iterations: int = 8,
+    xline_newton_damping: float = 1.0,
+    wall_n_steps: int = 2048,
+    wall_newton_iterations: int = 8,
+    wall_newton_damping: float = 1.0,
+    maximum_phi_shift: float,
+    bphi_floor: float = 0.0,
+    xline_residual_tolerance: float = 1.0e-10,
+    wall_residual_tolerance: float = 1.0e-10,
+    minimum_abs_transversality: float = 1.0e-8,
+) -> Any:
+    """Retain all JAX states from exact labelled seeds to wall events."""
+
+    return _pyna_strike_trajectory_bundle_api()(
+        essos_field_callable,
+        field,
+        branch_reference,
+        strike_matches,
+        wall_planes,
+        n_steps_per_span=n_steps_per_span,
+        xline_newton_iterations=xline_newton_iterations,
+        xline_newton_damping=xline_newton_damping,
+        wall_n_steps=wall_n_steps,
+        wall_newton_iterations=wall_newton_iterations,
+        wall_newton_damping=wall_newton_damping,
+        maximum_phi_shift=maximum_phi_shift,
+        bphi_floor=bphi_floor,
+        xline_residual_tolerance=xline_residual_tolerance,
+        wall_residual_tolerance=wall_residual_tolerance,
+        minimum_abs_transversality=minimum_abs_transversality,
+    )
+
+
 def _sample_index(value: int, size: int, name: str) -> int:
     try:
         index = operator.index(value)
@@ -905,4 +958,5 @@ __all__ = [
     "trace_manifold_branch",
     "trace_manifold_wall_strike",
     "trace_manifold_wall_strike_bundle",
+    "trace_manifold_wall_strike_bundle_trajectories",
 ]

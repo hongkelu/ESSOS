@@ -26,6 +26,11 @@ from pyna.topo.manifold_strike_contracts import (
 )
 
 from essos.losses import custom_loss
+from essos.manifold_leg_optimization import (
+    make_manifold_leg_clearance_loss,
+    manifold_leg_clearance_loss,
+    manifold_leg_clearance_state,
+)
 from essos.manifold_heat_optimization import (
     ManifoldHeatStage2Target,
     make_manifold_heat_stage2_loss,
@@ -192,6 +197,20 @@ def _sample_target(heat_target):
     )
 
 
+def _leg_wall_signed_distance(point_xyz):
+    """Smooth local wall proxy, positive on the allowed pre-strike side."""
+
+    x, y, z = point_xyz
+    del z
+    radius = jnp.sqrt(x * x + y * y)
+    phi = jnp.arctan2(y, x)
+    return (
+        6.0e-3 * (PHI_HIT - phi)
+        + 0.2 * (1.1003 - radius)
+        + 2.0e-4
+    )
+
+
 def test_gaussian_deposition_conserves_power_even_for_remote_cells():
     strike_points = jnp.array([[0.0, 0.0, 0.0], [1.0, -0.5, 0.2]])
     powers = jnp.array([30.0, 70.0])
@@ -276,6 +295,126 @@ def test_heat_limit_loss_has_live_field_gradient_and_custom_loss():
     custom_value, custom_gradient = loss.value_and_grad(loss.starting_dofs)
     np.testing.assert_allclose(custom_value, value, rtol=2.0e-12)
     np.testing.assert_allclose(custom_gradient, gradient, rtol=2.0e-10)
+
+
+def test_leg_clearance_uses_fixed_pre_strike_samples_and_excludes_wall_hit():
+    target = _heat_target()
+    field = _ShiftedHyperbolicField(jnp.asarray(PARAMETERS))
+    near_wall = manifold_leg_clearance_state(
+        field,
+        _leg_wall_signed_distance,
+        target_state=target,
+        minimum_clearance_m=1.0e-3,
+        clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=0.01,
+    )
+    protected = manifold_leg_clearance_state(
+        field,
+        _leg_wall_signed_distance,
+        target_state=target,
+        minimum_clearance_m=1.0e-3,
+        clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=0.2,
+    )
+
+    assert near_wall.trajectories.point_xyz.shape == (2, 129, 3)
+    assert near_wall.signed_clearance_m.shape == (2, 127)
+    assert protected.signed_clearance_m.shape == (2, 103)
+    assert np.any(np.asarray(near_wall.normalized_violation) > 0.0)
+    np.testing.assert_allclose(protected.normalized_violation, 0.0, atol=0.0)
+    np.testing.assert_allclose(
+        near_wall.trajectories.point_xyz[:, -1],
+        [match.point_xyz_m for match in target.strike_matches],
+        atol=2.0e-13,
+    )
+    assert not np.allclose(
+        protected.trajectories.point_xyz[:, 102],
+        protected.trajectories.point_xyz[:, -1],
+    )
+
+
+def test_leg_clearance_loss_has_live_field_gradient_and_custom_loss():
+    target = _heat_target()
+    parameters = jnp.asarray(PARAMETERS)
+
+    def objective(dynamic_parameters):
+        return manifold_leg_clearance_loss(
+            _ShiftedHyperbolicField(dynamic_parameters),
+            wall_signed_distance=_leg_wall_signed_distance,
+            target_state=target,
+            minimum_clearance_m=1.0e-3,
+            clearance_scale_m=1.0e-3,
+            terminal_exclusion_fraction=0.05,
+            strike_weights=target.strike_powers_W,
+        )
+
+    value, gradient = jax.value_and_grad(objective)(parameters)
+    direction = jnp.array([0.2, -0.3, 0.4])
+    delta = 2.0e-7
+    finite_difference = (
+        objective(parameters + delta * direction)
+        - objective(parameters - delta * direction)
+    ) / (2.0 * delta)
+    assert float(value) > 0.0
+    assert np.linalg.norm(np.asarray(gradient)) > 0.0
+    np.testing.assert_allclose(
+        jnp.dot(gradient, direction),
+        finite_difference,
+        rtol=3.0e-5,
+        atol=3.0e-7,
+    )
+
+    loss = make_manifold_leg_clearance_loss(
+        target,
+        _leg_wall_signed_distance,
+        minimum_clearance_m=1.0e-3,
+        clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=0.05,
+        strike_weights=target.strike_powers_W,
+    )
+    assert isinstance(loss, custom_loss)
+    assert loss.args_names == ("field",)
+    loss.dependencies = {"field": _ShiftedHyperbolicField(parameters)}
+    custom_value, custom_gradient = loss.value_and_grad(loss.starting_dofs)
+    np.testing.assert_allclose(custom_value, value, rtol=2.0e-12)
+    np.testing.assert_allclose(custom_gradient, gradient, rtol=2.0e-10)
+
+
+def test_leg_clearance_rejects_invalid_static_configuration():
+    target = _heat_target()
+    field = _ShiftedHyperbolicField(jnp.asarray(PARAMETERS))
+    common = dict(
+        target_state=target,
+        minimum_clearance_m=1.0e-3,
+        clearance_scale_m=1.0e-3,
+        terminal_exclusion_fraction=0.1,
+    )
+
+    with pytest.raises(ValueError, match="terminal_exclusion_fraction"):
+        manifold_leg_clearance_state(
+            field,
+            _leg_wall_signed_distance,
+            **{**common, "terminal_exclusion_fraction": 0.0},
+        )
+    with pytest.raises(ValueError, match="clearance_scale_m"):
+        manifold_leg_clearance_state(
+            field,
+            _leg_wall_signed_distance,
+            **{**common, "clearance_scale_m": 0.0},
+        )
+    with pytest.raises(ValueError, match="return a scalar"):
+        manifold_leg_clearance_state(
+            field,
+            lambda point_xyz: point_xyz[:2],
+            **common,
+        )
+    with pytest.raises(ValueError, match="one value per strike"):
+        manifold_leg_clearance_loss(
+            field,
+            wall_signed_distance=_leg_wall_signed_distance,
+            strike_weights=np.ones(3),
+            **common,
+        )
 
 
 def test_continuation_composes_heat_weight_and_omits_zero_weight_trace():
