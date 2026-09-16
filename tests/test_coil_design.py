@@ -555,3 +555,33 @@ def test_builder_rejects_invalid_shape_contracts_and_parameters():
         builder(jnp.zeros(3, dtype=int))
     with pytest.raises(ValueError, match="real-valued"):
         builder(jnp.zeros(3, dtype=complex))
+
+
+@pytest.mark.parametrize("planar", [False, True])
+def test_design_builder_preserves_physical_geometry_with_scaled_upstream_dofs(planar):
+    curves, original = _planar_coils(stellsym=False)
+    scaled = Coils(
+        Curves(original.curves._dofs, original.n_segments, original.nfp,
+               original.stellsym, scaling_factor=0.7, scale_fixed=3.0),
+        original.base_currents,
+    )
+    if planar:
+        builder = make_planar_coil_design_field_builder(
+            scaled, plane_frames=curves.frames, current_groups=(0,)
+        )
+    else:
+        builder = make_coil_design_field_builder(
+            scaled, current_groups=(0,), shape_dofs=((0, 0, 0),)
+        )
+    zero = jnp.zeros(builder.parameter_shape)
+    rebuilt = builder.rebuild_coils(zero)
+    np.testing.assert_allclose(rebuilt.gamma, original.gamma, atol=1e-14)
+    np.testing.assert_array_equal(rebuilt.base_currents, original.base_currents)
+    point = jnp.asarray([0.8, 0.2, 0.3])
+    expected = FilamentaryBiotSavart.from_coils(original).B(point)
+    np.testing.assert_allclose(builder(zero).B(point), expected, rtol=1e-12)
+    direction = jnp.zeros_like(zero).at[0].set(1.0)
+    tangent = jax.jvp(lambda x: builder(x).B(point), (zero,), (direction,))[1]
+    h = 1e-5
+    difference = (builder(h * direction).B(point) - builder(-h * direction).B(point)) / (2*h)
+    np.testing.assert_allclose(tangent, difference, rtol=1e-8, atol=1e-12)

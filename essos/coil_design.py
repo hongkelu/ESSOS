@@ -809,8 +809,8 @@ def make_coil_design_field_builder(
         )
 
     dofs = _host_real_floating_array(
-        coils.dofs_curves,
-        name="coils.dofs_curves",
+        coils.curves._dofs,
+        name="coils physical Fourier coefficients",
         ndim=3,
     )
     if dofs.shape[1] != 3 or dofs.shape[2] % 2 != 1:
@@ -931,8 +931,8 @@ def make_planar_coil_design_field_builder(
     elif plane_frames is None:
         raise ValueError("plane_frames is required for an ordinary Coils input")
     dofs = _host_real_floating_array(
-        coils.dofs_curves,
-        name="coils.dofs_curves",
+        coils.curves._dofs,
+        name="coils physical Fourier coefficients",
         ndim=3,
     )
     if dofs.shape[1] != 3 or dofs.shape[2] % 2 != 1:
