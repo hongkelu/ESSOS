@@ -206,4 +206,3 @@ def test_manifold_location_loss_validates_labels_and_target_shape():
             n_steps_per_span=32,
             newton_iterations=4,
         )
-
