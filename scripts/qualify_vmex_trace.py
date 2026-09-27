@@ -31,9 +31,9 @@ def main():
     from vmex.core import virtual_casing as vc
     from vmex.core.extender import VmecExtender
     from essos.fields import BiotSavart
-    from essos.vmex_field import VmexExteriorField
-    from essos.vmex_domain import FourierLCFSExteriorDomain
-    from essos.equilibrium_response import EquilibriumDefinition
+    from essos.equilibrium import VmexExteriorField
+    from essos.equilibrium import FourierLCFSExteriorDomain
+    from essos.equilibrium import EquilibriumDefinition
     from pyna.toroidal.flt import trace_orbit_along_phi_field
     if not jax.config.x64_enabled:raise ValueError('Float64 required')
     start=time.perf_counter()

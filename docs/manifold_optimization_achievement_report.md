@@ -281,7 +281,7 @@ Primary modules: `pyna/topo/xline_clearance.py` and
 - Added bounded-batch sampling of a live ESSOS field into PyNA's canonical
   `(BR, BZ, BPhi)` cylindrical grid for non-differentiable Cyna validation.
 
-Primary module: `essos/manifold.py`.
+Primary module: `essos/topology.py`.
 
 ### 2. Differentiable Stage-2 losses
 
@@ -295,9 +295,9 @@ Primary module: `essos/manifold.py`.
 - Wrapped each objective as an ESSOS `custom_loss`, differentiating through the
   same field/coils PyTree used by existing Stage-2 objectives.
 
-Primary modules: `essos/manifold.py`, `essos/manifold_optimization.py`,
-`essos/manifold_strike_optimization.py`, and
-`essos/manifold_heat_optimization.py`.
+Primary modules: `essos/topology.py`, `essos/topology_objectives.py`,
+`essos/topology_objectives.py`, and
+`essos/topology_objectives.py`.
 
 ### 3. Immutable continuation state
 
@@ -309,7 +309,7 @@ Primary modules: `essos/manifold.py`, `essos/manifold_optimization.py`,
 - Preserved physical targets, distance metrics, ordered labels, powers,
   provenance, wall cells, deposition width, and heat limit across refreshes.
 
-Primary module: `essos/manifold_optimization.py`.
+Primary module: `essos/topology_objectives.py`.
 
 ### 4. Candidate validation transaction and rollback
 
@@ -321,8 +321,8 @@ Primary module: `essos/manifold_optimization.py`.
   against the same preceding topology snapshot and returns the unchanged
   design if every attempt is rejected.
 
-Primary modules: `essos/manifold_validation.py`,
-`essos/manifold_strike_validation.py`, and `essos/manifold_driver.py`.
+Primary modules: `essos/topology_validation.py`,
+`essos/topology_validation.py`, and `essos/topology_validation.py`.
 
 ## Physical integration checkpoints
 
@@ -421,9 +421,9 @@ not counted among the 27 completed ESSOS commits.
 Current files:
 
 ```text
-M  essos/manifold.py
+M  essos/topology.py
 M  tests/test_manifold_heat_optimization.py
-?? essos/manifold_leg_optimization.py
+?? essos/topology_objectives.py
 ```
 
 Work already present in this uncommitted change:

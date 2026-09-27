@@ -71,7 +71,7 @@ material-grid adapter; it is not a VMEX test result or evidence of a VMEX defect
 
 ## Implemented integration
 
-`essos.vmex_field.VmexExteriorField` wraps a live VMEX `VmecExtender` and:
+`essos.equilibrium.VmexExteriorField` wraps a live VMEX `VmecExtender` and:
 
 - samples Cartesian total fields with an explicit exterior-domain predicate;
 - checks virtual-casing error estimates eagerly, including for compiled fields;

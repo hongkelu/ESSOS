@@ -26,19 +26,19 @@ from pyna.topo.manifold_strike_contracts import (
 )
 
 from essos.losses import custom_loss
-from essos.manifold_leg_optimization import (
+from essos.topology_objectives import (
     make_manifold_leg_clearance_loss,
     manifold_leg_clearance_loss,
     manifold_leg_clearance_state,
 )
-from essos.manifold_heat_optimization import (
+from essos.topology_objectives import (
     ManifoldHeatStage2Target,
     make_manifold_heat_stage2_loss,
     manifold_heat_flux_state,
     manifold_heat_stage2_limit_loss,
     power_conserving_gaussian_heat_flux,
 )
-from essos.manifold_optimization import (
+from essos.topology_objectives import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
     ManifoldContinuationState,

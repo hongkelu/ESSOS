@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import jax
 import jax.numpy as jnp
-from essos.candidate_cache import content_identity,CurrentGridBasis
+from essos.topology_optimizer import content_identity,CurrentGridBasis
 from essos.coils import Coils,Curves
 from essos.fields import BiotSavart
 

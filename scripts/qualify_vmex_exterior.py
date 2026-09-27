@@ -35,8 +35,8 @@ def main():
     from vmex import optimize as opt
     from vmex.core.extender import VmecExtender
     from vmex.core import virtual_casing as vc
-    from essos.vmex_field import VmexExteriorField
-    from essos.equilibrium_response import EquilibriumDefinition
+    from essos.equilibrium import VmexExteriorField
+    from essos.equilibrium import EquilibriumDefinition
     if not jax.config.x64_enabled:raise ValueError('Float64 required')
     start=time.perf_counter()
     source=Path(__file__).resolve().parents[1]/'essos/data/manifold_optimization'/f'{args.case}.vmec'
@@ -54,7 +54,7 @@ def main():
     report['vmex_runtime_sources']={str(path.relative_to(runtime_root)):hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(runtime_root.rglob('*.py'))}
     shutil.copyfile(__file__,args.output/'qualification_source.py')
-    import essos.vmex_field as adapter_module
+    import essos.equilibrium as adapter_module
     shutil.copyfile(adapter_module.__file__,args.output/'adapter_source.py')
     def save():
         report['elapsed_seconds']=time.perf_counter()-start
@@ -79,7 +79,7 @@ def main():
         points=np.array([[radius,0.,.15],[radius*np.cos(.3),radius*np.sin(.3),-.1]])
         np.save(args.output/'points.npy',points)
         if args.case=='li383':
-            from essos.coil_inputs import load_simsopt_xyz_coils
+            from essos.coils import load_simsopt_xyz_coils
             from essos.fields import BiotSavart
             coil_source=source.parent/'ncsx_coils.json'
             coils=load_simsopt_xyz_coils(coil_source,n_segments=128)

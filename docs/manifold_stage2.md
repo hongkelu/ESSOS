@@ -4,7 +4,7 @@ ESSOS owns the Stage-2 coil optimization problem.  PyNA owns the magnetic
 topology evaluated by that problem.  The dependency direction is one-way:
 ESSOS may optionally import PyNA, while PyNA never imports ESSOS.
 
-The bridge in `essos.manifold` passes either an ESSOS magnetic-field object or
+The bridge in `essos.topology` passes either an ESSOS magnetic-field object or
 an ESSOS `Coils` PyTree to PyNA's differentiable fixed-toroidal-angle map.  JAX
 then differentiates the map with respect to the same coil curves and currents
 used by the existing ESSOS engineering and normal-field objectives.
@@ -216,8 +216,8 @@ mean of each leg's mean squared normalized clearance violation. Fixed indices
 keep the objective differentiable even as the hit angle moves.
 
 ```python
-from essos.manifold_leg_optimization import ManifoldLegStage2Target
-from essos.manifold_leg_validation import ManifoldLegValidationConfig
+from essos.topology_objectives import ManifoldLegStage2Target
+from essos.topology_validation import ManifoldLegValidationConfig
 
 leg_target = ManifoldLegStage2Target(
     branch_reference=accepted_branch,

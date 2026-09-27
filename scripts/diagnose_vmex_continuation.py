@@ -35,7 +35,7 @@ def main():
     from vmex.core import implicit as im, freeboundary_implicit as fi, virtual_casing as vc
     from vmex.core.extender import VmecExtender
     from vmex.core.solver import SpectralState
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.fields import BiotSavart
     report = json.loads((args.run/'report.json').read_text())
     runtime_root = Path(vm.__file__).resolve().parent

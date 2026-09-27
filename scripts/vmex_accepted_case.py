@@ -11,7 +11,7 @@ def load_accepted_case(run):
     import jax.numpy as jnp
     import vmex as vm
     from vmex.core.solver import SpectralState
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     run=Path(run)
     report=json.loads((run/'report.json').read_text())
     runtime_root=Path(vm.__file__).resolve().parent

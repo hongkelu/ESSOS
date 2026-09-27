@@ -12,7 +12,7 @@ import jax.numpy as jnp
 pytest.importorskip("pyna.toroidal.flt.jax_poincare")
 
 from essos.losses import custom_loss
-from essos.manifold import (
+from essos.topology import (
     return_map_surface_loss,
     return_map_surface_residuals,
 )

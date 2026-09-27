@@ -20,7 +20,7 @@ from pyna.topo.manifold_correspondence import (
     refresh_manifold_sample_match,
 )
 
-from essos.manifold_optimization import (
+from essos.topology_objectives import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
     ManifoldContinuationState,

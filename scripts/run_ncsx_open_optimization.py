@@ -23,11 +23,11 @@ def main():
     import numpy as np
     import jax
     import jax.numpy as jnp
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.coils import Coils
     from essos.fields import BiotSavart
-    from essos.manifold import essos_field_to_pyna_cylindrical_grid
-    from essos.open_bundle_optimization import LaunchBundle,OpenBundleObjective
+    from essos.topology import essos_field_to_pyna_cylindrical_grid
+    from essos.topology_objectives import LaunchBundle,OpenBundleObjective
     from essos.topology_optimizer import DesignProblem,optimize_topology
     from pyna.topo.open_validation import validate_open_bundle_3d
     from pyna.topo.clearance3d import TriangleWall

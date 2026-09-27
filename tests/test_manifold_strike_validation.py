@@ -20,8 +20,8 @@ from pyna.topo.manifold_strike_contracts import (
 )
 from pyna.toroidal.geometry import ToroidalWall
 
-from essos.manifold_strike_optimization import ManifoldStrikeStage2Target
-from essos.manifold_strike_validation import validate_manifold_strike_candidate
+from essos.topology_objectives import ManifoldStrikeStage2Target
+from essos.topology_validation import validate_manifold_strike_candidate
 
 
 RATE = 0.4

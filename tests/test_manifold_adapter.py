@@ -13,13 +13,13 @@ pytest.importorskip("pyna.toroidal.flt.jax_poincare")
 
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
-from essos.manifold import (
+from essos.topology import (
     biot_savart_field_callable,
     essos_field_to_pyna_cylindrical_grid,
     fixed_phi_poincare_map,
     fixed_phi_poincare_map_from_coils,
 )
-from essos.manifold_optimization import trace_manifold_reference
+from essos.topology_objectives import trace_manifold_reference
 
 
 @jax.tree_util.register_pytree_node_class

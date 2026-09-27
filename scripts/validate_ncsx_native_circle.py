@@ -18,10 +18,10 @@ def main():
     from manifold_run_manifest import capture_source_manifest
     capture_source_manifest(args.output)
     import numpy as np
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.coils import Coils
     from essos.fields import BiotSavart
-    from essos.manifold import essos_field_to_pyna_cylindrical_grid
+    from essos.topology import essos_field_to_pyna_cylindrical_grid
     from pyna.toroidal.flt import trace_map_batch_span_field
     from pyna.topo.torus_solver import interpolate
     report=json.loads((args.optimization/'report.json').read_text())

@@ -20,8 +20,8 @@ def main():
     from run_manifold_baseline import require_compute_allocation
     require_compute_allocation(parser)
     modules={}
-    for name in ('essos','essos.open_bundle_optimization','essos.vmec_response','essos.surface_optimization',
-                 'essos.equilibrium_surface_optimization','essos.coil_inputs','pyna','pyna.topo.torus_solver','pyna.topo.circle_validation','pyna.topo.open_validation','pyna._cyna'):
+    for name in ('essos','essos.topology_objectives','essos.equilibrium','essos.topology_objectives',
+                 'essos.topology_objectives','essos.coils','pyna','pyna.topo.torus_solver','pyna.topo.circle_validation','pyna.topo.open_validation','pyna._cyna'):
         module=importlib.import_module(name);path=Path(module.__file__).resolve()
         if not path.is_relative_to(prefix):raise RuntimeError(f'{name} imported outside installed prefix: {path}')
         modules[name]=str(path)

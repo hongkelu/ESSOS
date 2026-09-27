@@ -30,7 +30,7 @@ def main():
     from vmex.core import virtual_casing as vc
     from vmex.core.extender import VmecExtender
     from essos.fields import BiotSavart
-    from essos.vmex_domain import FourierLCFSExteriorDomain
+    from essos.equilibrium import FourierLCFSExteriorDomain
     if not jax.config.x64_enabled:raise ValueError('Float64 required')
     start=time.perf_counter()
     import vmex_accepted_case as loader

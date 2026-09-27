@@ -21,7 +21,7 @@ def main():
     sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'examples/manifold_optimization'))
     import numpy as np
     from tokamak_fixture import physical_field_controls,_tokamak_production_field,_tokamak_production_branch
-    from essos.manifold_sample_objective import ManifoldSampleObjective
+    from essos.topology_objectives import ManifoldSampleObjective
     from essos.topology_optimizer import DesignProblem,optimize_topology
     start=time.perf_counter()
     branch=_tokamak_production_branch(physical_field_controls(np.array([1.,-1.2])))

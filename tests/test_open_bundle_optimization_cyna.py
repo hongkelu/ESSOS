@@ -6,7 +6,7 @@ from pyna.toroidal.geometry import ToroidalWall
 from pyna.toroidal.control.strike_heat import StrikeSeedBundle
 from pyna.topo.clearance3d import TriangleWall
 from pyna.topo.open_validation import validate_open_bundle_3d
-from essos.open_bundle_optimization import LaunchBundle, OpenBundleObjective
+from essos.topology_objectives import LaunchBundle, OpenBundleObjective
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 

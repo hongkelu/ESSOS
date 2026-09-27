@@ -22,8 +22,8 @@ def main():
     prefix=args.prefix.resolve();root=Path(__file__).resolve().parents[1]
     os.environ.update(JAX_PLATFORMS='cpu',JAX_ENABLE_X64='1',OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1')
     sys.path.insert(0,str(prefix))
-    import essos.vmex_field as adapter
-    import essos.vmex_domain as domain
+    import essos.equilibrium as adapter
+    import essos.equilibrium as domain
     import pyna._cyna as native
     if any(not Path(path).is_relative_to(prefix) for path in (adapter.__file__,domain.__file__,native._cyna_ext.__file__)):
         raise RuntimeError('Project modules must come from the installed-wheel prefix')

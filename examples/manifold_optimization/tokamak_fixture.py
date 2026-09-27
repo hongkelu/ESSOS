@@ -8,7 +8,7 @@ import numpy as np
 import jax.numpy as jnp
 from essos.coils import Coils,Curves
 from essos.fields import BiotSavart
-from essos.manifold import periodic_xline_state,essos_field_to_pyna_cylindrical_grid
+from essos.topology import periodic_xline_state,essos_field_to_pyna_cylindrical_grid
 from pyna.topo.toroidal import FixedPoint
 from pyna.toroidal.flt import refine_fixed_points_monodromy_span_field,trace_fixed_point_manifolds_field
 from pyna.topo.manifold_correspondence import manifold_branch_reference_from_trace

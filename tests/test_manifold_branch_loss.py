@@ -12,7 +12,7 @@ import jax.numpy as jnp
 pytest.importorskip("pyna.topo.jax_manifold")
 
 from essos.losses import custom_loss
-from essos.manifold import (
+from essos.topology import (
     manifold_sample_location_loss,
     trace_manifold_branch,
 )

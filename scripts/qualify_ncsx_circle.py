@@ -27,7 +27,7 @@ def main():
     import jax
     import jax.numpy as jnp
     import numpy as np
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.coils import Coils
     from essos.fields import BiotSavart
     from pyna.topo.jax_periodic import periodic_point_state

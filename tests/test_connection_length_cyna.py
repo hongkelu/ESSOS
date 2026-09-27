@@ -13,7 +13,7 @@ from pyna.toroidal.flt import trace_wall_hits_twall_field  # noqa: E402
 from pyna.toroidal.geometry import ToroidalWall  # noqa: E402
 
 from essos.fields import CircularTokamakField  # noqa: E402
-from essos.manifold import essos_field_to_pyna_cylindrical_grid  # noqa: E402
+from essos.topology import essos_field_to_pyna_cylindrical_grid  # noqa: E402
 from tests.test_connection_length import (  # noqa: E402
     B_POLOIDAL, B_TOROIDAL, MAJOR_RADIUS, PLATE_DEPTH, circular_tokamak_plate_solution)
 

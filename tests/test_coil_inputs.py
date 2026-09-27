@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from essos.coil_inputs import load_simsopt_xyz_coils
+from essos.coils import load_simsopt_xyz_coils
 from essos.coils import Curves,Coils
 
 

@@ -10,17 +10,17 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from essos.losses import custom_loss
-from essos.manifold_leg_optimization import (
+from essos.topology_objectives import (
     ManifoldLegStage2Target, make_manifold_leg_stage2_loss,
     require_same_leg_configuration,
 )
-from essos.manifold_leg_validation import ManifoldLegValidationConfig
-from essos.manifold_optimization import (
+from essos.topology_validation import ManifoldLegValidationConfig
+from essos.topology_objectives import (
     ManifoldContinuationSchedule, ManifoldContinuationStage,
     ManifoldContinuationState, compose_manifold_stage2_loss,
     accept_manifold_continuation_stage,
 )
-from essos.manifold_driver import validated_manifold_backtracking_step
+from essos.topology_validation import validated_manifold_backtracking_step
 from tests.test_manifold_heat_optimization import (
     _heat_target, _sample_target, _leg_wall_signed_distance,
     _ShiftedHyperbolicField, PARAMETERS,
@@ -61,7 +61,7 @@ def test_leg_target_composes_without_heat_and_zero_weight_never_traces(monkeypat
 
     def forbidden(*args, **kwargs):
         raise AssertionError("inactive leg objective traced")
-    monkeypatch.setattr("essos.manifold_leg_optimization.trace_manifold_leg_reference", forbidden)
+    monkeypatch.setattr("essos.topology_objectives.trace_manifold_leg_reference", forbidden)
     inactive = replace(active, schedule=ManifoldContinuationSchedule((ManifoldContinuationStage(name="base"),)))
     ordinary = compose_manifold_stage2_loss(base, inactive, dependencies={"field": field})
     np.testing.assert_allclose(ordinary(ordinary.starting_dofs), PARAMETERS[0] ** 2)

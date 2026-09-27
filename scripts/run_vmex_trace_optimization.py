@@ -33,8 +33,8 @@ def main():
     from vmex.core import virtual_casing as vc
     from vmex.core.extender import VmecExtender
     from essos.fields import BiotSavart
-    from essos.equilibrium_response import EquilibriumDefinition
-    from essos.vmex_field import VmexExteriorField
+    from essos.equilibrium import EquilibriumDefinition
+    from essos.equilibrium import VmexExteriorField
     from essos.topology_optimizer import DesignProblem,Evaluation,optimize_topology
     from pyna.toroidal.flt import trace_orbit_along_phi_field
     import vmex_accepted_case as loader

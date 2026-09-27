@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import pytest
 pytest.importorskip("pyna.topo.open_validation")
 from pyna.topo.open_validation import OpenBundleValidation  # noqa: E402
-from essos.open_bundle_optimization import LaunchBundle, OpenBundleObjective  # noqa: E402
+from essos.topology_objectives import LaunchBundle, OpenBundleObjective  # noqa: E402
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 

@@ -1466,15 +1466,15 @@ The source review performed for this document is selective. No source below esta
 | [S14] | A. Giuliani, F. Wechsung, A. Cerfon, M. Landreman, G. Stadler, *Direct stellarator coil optimization for nested magnetic surfaces with precise quasi-symmetry*, arXiv:2210.03248 | Strong direct-surface optimization comparator and approximate-surface distinction. |
 
 [S01]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/toroidal/torus_deformation.py
-[S02]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/manifold.py
+[S02]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/topology.py
 [S03]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/topo/manifold_correspondence.py
 [S04]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/topo/jax_manifold.py
-[S05]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/manifold_driver.py
+[S05]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/topology_validation.py
 [S06]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/.github/workflows/build_test.yml
 [S07]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/tests/test_qa_manifold_coils.py
 [S08]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/topo/jax_periodic.py
 [S09]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/topo/jax_strike.py
-[S10]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/manifold_optimization.py
+[S10]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/essos/topology_objectives.py
 [S11]: https://raw.githubusercontent.com/WenyinWei/pyna/4f032d7/pyna/topo/manifold_leg_clearance.py
 [S12]: https://raw.githubusercontent.com/hongkelu/ESSOS/3c1dc4f/pyproject.toml
 [S13]: https://arxiv.org/abs/2102.04497

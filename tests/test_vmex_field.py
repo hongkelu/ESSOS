@@ -11,8 +11,8 @@ import pytest
 pytest.importorskip("vmex")
 from vmex.core.extender import VmecExtender
 from vmex.core.virtual_casing import VmecSurfaceFieldData
-from essos.equilibrium_response import EquilibriumDefinition
-from essos.vmex_field import VmexExteriorField
+from essos.equilibrium import EquilibriumDefinition
+from essos.equilibrium import VmexExteriorField
 
 jax.config.update('jax_enable_x64', True)
 

@@ -39,14 +39,14 @@ def main():
     import jax
     import jax.numpy as jnp
     import vmex as vm
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.fields import BiotSavart
-    from essos.equilibrium_response import EquilibriumDefinition
-    from essos.vmex_field import VmexExteriorField
+    from essos.equilibrium import EquilibriumDefinition
+    from essos.equilibrium import VmexExteriorField
     from vmex.core.extender import VmecExtender
     if not jax.config.x64_enabled:raise ValueError('Float64 required')
     shutil.copyfile(__file__,args.output/"qualification_source.py")
-    import essos.vmex_field as adapter_module
+    import essos.equilibrium as adapter_module
     shutil.copyfile(adapter_module.__file__,args.output/"adapter_source.py")
     start=time.perf_counter()
     data=Path(__file__).resolve().parents[1]/'essos/data/manifold_optimization'

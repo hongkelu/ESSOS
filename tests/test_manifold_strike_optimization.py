@@ -21,13 +21,13 @@ from pyna.topo.manifold_strike_contracts import (
     ManifoldStrikeMatch,
 )
 
-from essos.manifold_strike_optimization import (
+from essos.topology_objectives import (
     ManifoldStrikeStage2Target,
     make_manifold_strike_stage2_loss,
     manifold_strike_stage2_target_loss,
     trace_manifold_strike_reference,
 )
-from essos.manifold_optimization import (
+from essos.topology_objectives import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
     ManifoldContinuationState,

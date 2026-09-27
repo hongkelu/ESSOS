@@ -1,25 +1,22 @@
-"""ESSOS adapters for PyNA's differentiable topology primitives.
+"""Magnetic topology primitives on ESSOS fields, backed by pyna's JAX kernels.
 
-ESSOS owns the Stage-2 design variables and magnetic-field models.  PyNA owns
-field-line maps and topology.  The functions here provide the one-way bridge
-from ESSOS to the optional JAX backend in PyNA without introducing an ESSOS
-dependency in PyNA.
-
-PyNA is imported lazily so ordinary ESSOS installations do not require it.
+Field adapters (ESSOS field to pyna callables and cylindrical grids), periodic
+X-lines and their losses, invariant-manifold branches, labelled wall strikes and
+return-map surface residuals.
 """
-
 from __future__ import annotations
-
 import operator
 from collections.abc import Callable
 from typing import Any, NamedTuple
-
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 from essos.fields import BiotSavart
 
+
+# ----------------------------------------------------------------------------
+# From essos/manifold.py: ESSOS adapters for PyNA's differentiable topology primitives.
+# ----------------------------------------------------------------------------
 
 def essos_field_callable(xyz: Any, field: Any) -> Any:
     """Evaluate an ESSOS magnetic-field object for PyNA.
@@ -956,27 +953,3 @@ def return_map_surface_loss(
     if weights_array.shape != squared.shape:
         raise ValueError("weights must have shape (n_seeds,)")
     return jnp.sum(weights_array * squared) / jnp.sum(weights_array)
-
-
-__all__ = [
-    "ManifoldBranchTrace",
-    "biot_savart_field_callable",
-    "essos_field_to_pyna_cylindrical_grid",
-    "essos_field_callable",
-    "fixed_phi_poincare_map",
-    "fixed_phi_poincare_map_from_coils",
-    "manifold_sample_location_loss",
-    "periodic_xline_clearance_loss",
-    "periodic_xline_clearance_residuals",
-    "periodic_xline_hyperbolicity_loss",
-    "periodic_xline_location_loss",
-    "periodic_xline_position",
-    "periodic_xline_state",
-    "periodic_xline_trajectory",
-    "return_map_surface_loss",
-    "return_map_surface_residuals",
-    "trace_manifold_branch",
-    "trace_manifold_wall_strike",
-    "trace_manifold_wall_strike_bundle",
-    "trace_manifold_wall_strike_bundle_trajectories",
-]

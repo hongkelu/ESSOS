@@ -30,15 +30,15 @@ from pyna.toroidal.geometry import ToroidalWall
 
 from essos.coils import Coils, Curves
 from essos.fields import BiotSavart
-from essos.manifold_driver import validated_manifold_backtracking_step
-from essos.manifold_leg_optimization import ManifoldLegStage2Target
-from essos.manifold_leg_validation import ManifoldLegValidationConfig, validate_manifold_leg_candidate
-from essos.manifold import (
+from essos.topology_validation import validated_manifold_backtracking_step
+from essos.topology_objectives import ManifoldLegStage2Target
+from essos.topology_validation import ManifoldLegValidationConfig, validate_manifold_leg_candidate
+from essos.topology import (
     essos_field_to_pyna_cylindrical_grid,
     periodic_xline_state,
     trace_manifold_branch,
 )
-from essos.manifold_optimization import (
+from essos.topology_objectives import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
     ManifoldContinuationState,
@@ -46,13 +46,13 @@ from essos.manifold_optimization import (
     manifold_stage2_target_loss,
     trace_manifold_reference,
 )
-from essos.manifold_validation import validate_manifold_continuation_candidate
-from essos.manifold_strike_optimization import (
+from essos.topology_validation import validate_manifold_continuation_candidate
+from essos.topology_objectives import (
     ManifoldStrikeStage2Target,
     manifold_strike_stage2_target_loss,
     trace_manifold_strike_reference,
 )
-from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
+from essos.topology_validation import ManifoldStrikeValidationConfig
 
 
 N_TF = 8

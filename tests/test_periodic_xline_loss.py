@@ -12,7 +12,7 @@ import jax.numpy as jnp
 pytest.importorskip("pyna.topo.jax_periodic")
 
 from essos.losses import custom_loss
-from essos.manifold import (
+from essos.topology import (
     periodic_xline_clearance_loss,
     periodic_xline_clearance_residuals,
     periodic_xline_hyperbolicity_loss,

@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from essos.vmex_domain import FourierLCFSExteriorDomain
+from essos.equilibrium import FourierLCFSExteriorDomain
 
 
 def test_torus_interior_exterior_and_unresolved_boundary():

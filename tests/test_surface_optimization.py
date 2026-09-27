@@ -1,7 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 from pyna.topo.torus_solver import InvariantCircleProblem
-from essos.surface_optimization import CircleObjective
+from essos.topology_objectives import CircleObjective
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 

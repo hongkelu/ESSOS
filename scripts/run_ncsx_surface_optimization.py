@@ -30,10 +30,10 @@ def main():
     import jax
     import jax.numpy as jnp
     import numpy as np
-    from essos.coil_inputs import load_simsopt_xyz_coils
+    from essos.coils import load_simsopt_xyz_coils
     from essos.coils import Coils
     from essos.fields import BiotSavart
-    from essos.surface_optimization import CircleObjective
+    from essos.topology_objectives import CircleObjective
     from essos.topology_optimizer import DesignProblem,Evaluation,optimize_topology
     from pyna.topo.torus_solver import InvariantCircleProblem,interpolate
     from pyna.toroidal.flt.jax_poincare import poincare_map

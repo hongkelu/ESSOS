@@ -27,7 +27,7 @@ check distinguishes constrained stationarity from an unresolved model decrease.
 
 ## Open lines and manifolds
 
-`essos.open_bundle_optimization.LaunchBundle` declares fixed physical, moving
+`essos.topology_objectives.LaunchBundle` declares fixed physical, moving
 physical, flux-labelled, or manifold-generated launches and whether quadrature
 weights move. Moving conventions require explicit differentiable launch/weight
 arrays; a label does not construct a flux surface. Local wall events and
@@ -37,7 +37,7 @@ Dopri8 with event root finding, forward-mode derivatives through
 accuracy and derivatives are checked against closed-form solutions in
 `tests/test_connection_length.py`.
 
-`essos.open_bundle_optimization.OpenBundleObjective` uses observables of
+`essos.topology_objectives.OpenBundleObjective` uses observables of
 `(hit_RZPhi, connection_lengths, weights, parameters)`. Its production callback
 must return `OpenBundleValidation`. `pyna.topo.open_validation.validate_open_bundle_3d`
 requires launches strictly inside the production wall, retraces first hits and
@@ -47,7 +47,7 @@ Targets and scales remain fixed during refresh. The local model's value is
 aligned with production observables; its Jacobian still requires independent
 production finite-difference/refinement checks.
 
-`essos.manifold_sample_objective.ManifoldSampleObjective` provides the equivalent
+`essos.topology_objectives.ManifoldSampleObjective` provides the equivalent
 adapter for a labelled, production-refreshed manifold sample. Existing ESSOS
 manifold, strike, heat and leg targets accept `derivative_mode`:
 
@@ -102,7 +102,7 @@ stationarity problem and differentiates its full KKT system, including residual
 curvature. Its result exposes nonzero invariance residual separately.
 `validate_circle_nesting` checks ordered labels, sampled containment, edge
 intersections and separation; Fourier and dense-sampling refinement remain
-necessary. `essos.surface_optimization.CircleObjective` connects exact corrected
+necessary. `essos.topology_objectives.CircleObjective` connects exact corrected
 circles to the shared optimizer without a manifold target.
 
 Map rotation is an angle per declared physical toroidal span. Divide by that
@@ -114,7 +114,7 @@ historical behavior with explicit limitations/deprecation warnings.
 
 ## Equilibrium response
 
-`essos.equilibrium_response.ImplicitEquilibriumField` wraps an external primal
+`essos.equilibrium.ImplicitEquilibriumField` wraps an external primal
 solver and a square, gauged residual `E(z,c)=0`. It computes total **Eulerian**
 field response through primal and adjoint linear solves, rejecting nonconverged
 or singular states. The caller declares boundary assumptions, profiles held
@@ -122,7 +122,7 @@ fixed, controls and spatial domain. `EquilibriumCircleObjective` composes this
 response with a surface map depending on `(controls, equilibrium_unknowns)` and
 requires both equilibrium and topology validity at every acceptance.
 
-`essos.vmec_response.VmecJaxMaterialField` is an optional, distinct adapter to the
+`essos.equilibrium.VmecJaxMaterialField` is an optional, distinct adapter to the
 accessible VMEC-JAX checkout. Its Cartesian field is sampled at **moving VMEC
 flux-grid positions**. It cannot be passed to a fixed-position field-line tracer
 without coordinate inversion and response. Controls are fixed-boundary Fourier
@@ -149,7 +149,7 @@ currents and all-zero currents retain usable defaults.
 
 ## VMEX exterior-field adapter
 
-`essos.vmex_field.VmexExteriorField` consumes a VMEX `VmecExtender`, an explicit
+`essos.equilibrium.VmexExteriorField` consumes a VMEX `VmecExtender`, an explicit
 `EquilibriumDefinition`, a strict exterior-domain predicate, and the caller's
 primal acceptance. `sample` returns Cartesian B plus an eager quadrature report;
 `to_pyna_grid` samples an exterior-only cylindrical grid for native Cyna tracing.
@@ -174,7 +174,7 @@ both backend parameter blocks from the same physical control at each candidate.
 
 ### Fourier LCFS domain check
 
-`essos.vmex_domain.FourierLCFSExteriorDomain.from_wout(wout)` constructs a
+`essos.equilibrium.FourierLCFSExteriorDomain.from_wout(wout)` constructs a
 host-side exterior predicate for `VmexExteriorField`. `domain(points)` returns
 one Boolean per Cartesian point. `domain.classify(points)` additionally returns
 a conservative signed clearance from the polygon in each constant-phi RZ

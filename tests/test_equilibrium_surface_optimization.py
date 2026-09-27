@@ -2,9 +2,9 @@ import numpy as np
 import jax.numpy as jnp
 from scipy.optimize import brentq
 from pyna.topo.torus_solver import InvariantCircleProblem
-from essos.equilibrium_response import EquilibriumDefinition,ImplicitEquilibriumField
-from essos.surface_optimization import CircleObjective
-from essos.equilibrium_surface_optimization import EquilibriumCircleObjective
+from essos.equilibrium import EquilibriumDefinition,ImplicitEquilibriumField
+from essos.topology_objectives import CircleObjective
+from essos.topology_objectives import EquilibriumCircleObjective
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 

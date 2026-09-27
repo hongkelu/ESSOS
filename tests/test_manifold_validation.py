@@ -24,22 +24,22 @@ from pyna.topo.toroidal import FixedPoint
 from pyna.toroidal.flt import trace_fixed_point_manifolds_field
 from pyna.toroidal.geometry import ToroidalWall
 
-from essos.manifold import essos_field_to_pyna_cylindrical_grid
-from essos.manifold_driver import validated_manifold_backtracking_step
-from essos.manifold_optimization import (
+from essos.topology import essos_field_to_pyna_cylindrical_grid
+from essos.topology_validation import validated_manifold_backtracking_step
+from essos.topology_objectives import (
     ManifoldContinuationSchedule,
     ManifoldContinuationStage,
     ManifoldContinuationState,
     ManifoldStage2Target,
 )
-from essos.manifold_heat_optimization import ManifoldHeatStage2Target
-from essos.manifold_validation import (
+from essos.topology_objectives import ManifoldHeatStage2Target
+from essos.topology_validation import (
     ManifoldHeatValidationConfig,
     XLineClearanceValidationConfig,
     validate_manifold_continuation_candidate,
 )
-from essos.manifold_strike_optimization import ManifoldStrikeStage2Target
-from essos.manifold_strike_validation import ManifoldStrikeValidationConfig
+from essos.topology_objectives import ManifoldStrikeStage2Target
+from essos.topology_validation import ManifoldStrikeValidationConfig
 
 
 RATE = 0.35

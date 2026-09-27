@@ -2,7 +2,7 @@ import numpy as np
 import jax.numpy as jnp
 from scipy.optimize import root
 import pytest
-from essos.equilibrium_response import EquilibriumDefinition,ImplicitEquilibriumField
+from essos.equilibrium import EquilibriumDefinition,ImplicitEquilibriumField
 
 
 def test_external_primal_total_field_jvp_vjp_and_resolved_finite_difference():

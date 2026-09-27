@@ -26,7 +26,7 @@ def main():
     os.environ['JAX_ENABLE_X64']='1'
     sys.path.insert(0,str(args.solver_root.resolve()))
     import numpy as np
-    from essos.vmec_response import VmecJaxMaterialField
+    from essos.equilibrium import VmecJaxMaterialField
     source=Path(__file__).resolve().parents[1]/'essos/data/manifold_optimization'/f'{args.case}.vmec'
     start=time.perf_counter();print('Building equilibrium response adapter',flush=True)
     adapter=VmecJaxMaterialField(source,args.output/'equilibria',controls=(('rc',1,0),),force_tolerance=args.force_tolerance,response_method=args.method)
