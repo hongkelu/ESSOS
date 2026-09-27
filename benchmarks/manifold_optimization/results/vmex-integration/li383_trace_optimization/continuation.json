@@ -1,0 +1,574 @@
+[
+  {
+    "current_factor": 1.0003,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.251439218023296e-13,
+          2.2487053172493552e-13,
+          6.388834138564056e-14,
+          9.789663771415225e-13
+        ],
+        "checkpoint": "ladder-00/state-ns16.npz",
+        "checkpoint_sha256": "030933bb4143d7d346acda20b52449fb36b69e93c9a1fe64ff20d98bf2485c69"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.826610192495563e-13,
+          2.0208290410295894e-13,
+          3.0181264421100215e-14,
+          9.397068798135147e-13
+        ],
+        "checkpoint": "ladder-00/state-ns24.npz",
+        "checkpoint_sha256": "edd017e7047a68f73b478d4aff46600fedf45eb6f589249b458f2150a7899ce4"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855998008896833e-13,
+          3.077509435649507e-13,
+          1.0363444441142188e-14,
+          5.242742545610072e-13
+        ],
+        "checkpoint": "ladder-00/state-ns32.npz",
+        "checkpoint_sha256": "7c97b28bc920dcf126b09be532a8744c6d03998ba755d8be5011987cb4e1df0b"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.220369137839011e-13,
+          2.2546617102949016e-13,
+          6.411859093934887e-14,
+          9.652955679696847e-13
+        ],
+        "checkpoint": "ladder-01/state-ns16.npz",
+        "checkpoint_sha256": "897e9982f320bbbfd2af880f6a8f2bdb1c069b68b2eb4211665a027d29e86484"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.952228332110323e-13,
+          2.011112026210164e-13,
+          2.997032949478841e-14,
+          9.45974960103358e-13
+        ],
+        "checkpoint": "ladder-01/state-ns24.npz",
+        "checkpoint_sha256": "accf731a73b4c59b24e28e791bd41f09121ad5d398000b9be6c9deb99efed96f"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.951581853824965e-13,
+          3.1624656147652457e-13,
+          1.0370261266671352e-14,
+          5.521790602738498e-13
+        ],
+        "checkpoint": "ladder-01/state-ns32.npz",
+        "checkpoint_sha256": "4c8226ea3eec9d980540765d1cef36e1ae86e3afb65926de66ba74648962ddf4"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.220369137839011e-13,
+          2.2546617102949016e-13,
+          6.411859093934887e-14,
+          9.652955679696847e-13
+        ],
+        "checkpoint": "ladder-02/state-ns16.npz",
+        "checkpoint_sha256": "897e9982f320bbbfd2af880f6a8f2bdb1c069b68b2eb4211665a027d29e86484"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.952228332110323e-13,
+          2.011112026210164e-13,
+          2.997032949478841e-14,
+          9.45974960103358e-13
+        ],
+        "checkpoint": "ladder-02/state-ns24.npz",
+        "checkpoint_sha256": "accf731a73b4c59b24e28e791bd41f09121ad5d398000b9be6c9deb99efed96f"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.951581853824965e-13,
+          3.1624656147652457e-13,
+          1.0370261266671352e-14,
+          5.521790602738498e-13
+        ],
+        "checkpoint": "ladder-02/state-ns32.npz",
+        "checkpoint_sha256": "4c8226ea3eec9d980540765d1cef36e1ae86e3afb65926de66ba74648962ddf4"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.220369137839011e-13,
+          2.2546617102949016e-13,
+          6.411859093934887e-14,
+          9.652955679696847e-13
+        ],
+        "checkpoint": "ladder-03/state-ns16.npz",
+        "checkpoint_sha256": "897e9982f320bbbfd2af880f6a8f2bdb1c069b68b2eb4211665a027d29e86484"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.952228332110323e-13,
+          2.011112026210164e-13,
+          2.997032949478841e-14,
+          9.45974960103358e-13
+        ],
+        "checkpoint": "ladder-03/state-ns24.npz",
+        "checkpoint_sha256": "accf731a73b4c59b24e28e791bd41f09121ad5d398000b9be6c9deb99efed96f"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.951581853824965e-13,
+          3.1624656147652457e-13,
+          1.0370261266671352e-14,
+          5.521790602738498e-13
+        ],
+        "checkpoint": "ladder-03/state-ns32.npz",
+        "checkpoint_sha256": "4c8226ea3eec9d980540765d1cef36e1ae86e3afb65926de66ba74648962ddf4"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0001,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.226420363512965e-13,
+          2.250791788858739e-13,
+          6.405797625312849e-14,
+          9.678751729510592e-13
+        ],
+        "checkpoint": "ladder-04/state-ns16.npz",
+        "checkpoint_sha256": "614948b2168e75d18398a5ff06cf9a05159e7f1bd58231af8eaa1e359bfeb129"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.937270518082323e-13,
+          2.017625245515671e-13,
+          3.012158720103348e-14,
+          9.429667034046656e-13
+        ],
+        "checkpoint": "ladder-04/state-ns24.npz",
+        "checkpoint_sha256": "741ca4c5f994824d657b41b6526e6009544b0e34e272b799ba0b140ab4569415"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.96323464492263e-13,
+          3.166663239400336e-13,
+          1.0356118886492875e-14,
+          5.506852283822239e-13
+        ],
+        "checkpoint": "ladder-04/state-ns32.npz",
+        "checkpoint_sha256": "47332b0d74356cefa9e2678da143d3525210f4b2274185c1e12577563acb1e75"
+      }
+    ]
+  },
+  {
+    "current_factor": 0.9999,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.21490579548214e-13,
+          2.254223100982458e-13,
+          6.421042665838255e-14,
+          9.638475221892364e-13
+        ],
+        "checkpoint": "ladder-05/state-ns16.npz",
+        "checkpoint_sha256": "51c63b32fce70f2d77aeed4684ff7cb21b7418644f4fc649b77b52d14906656b"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.935868648462762e-13,
+          2.0007782075330093e-13,
+          2.974793728480908e-14,
+          9.433514668060026e-13
+        ],
+        "checkpoint": "ladder-05/state-ns24.npz",
+        "checkpoint_sha256": "cdab29a6aeaee572ece4697b2ce750e85edcfa501ba5e6c4a9b99cb8021be3a0"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.947563016591963e-13,
+          3.157641600289025e-13,
+          1.0386144217327505e-14,
+          5.536541416194532e-13
+        ],
+        "checkpoint": "ladder-05/state-ns32.npz",
+        "checkpoint_sha256": "08a30ea11439dd249d54bf33a387df3ea57c0b04959a46be1e0fccf2f1cc5250"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0002987329290542,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.250569569710525e-13,
+          2.2483425914612254e-13,
+          6.388053465125657e-14,
+          9.793291305684316e-13
+        ],
+        "checkpoint": "ladder-06/state-ns16.npz",
+        "checkpoint_sha256": "07cda093f28c17f6a95fc0acd709813e9ed1b5e03f7cb857670758e9605c5c11"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.826987977938194e-13,
+          2.0207398207919156e-13,
+          3.0180128923118184e-14,
+          9.396944473409285e-13
+        ],
+        "checkpoint": "ladder-06/state-ns24.npz",
+        "checkpoint_sha256": "a67a73b60764f9ab417fdfc8b2f57755da3c4b04dca331cc55628e295b7f06fa"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855913931573853e-13,
+          3.0776168839049235e-13,
+          1.0363627419413657e-14,
+          5.242547054111856e-13
+        ],
+        "checkpoint": "ladder-06/state-ns32.npz",
+        "checkpoint_sha256": "41dae45cbc3e087621e715a95e2fe1bea4942b4b6167ca90910435e24a3f3c68"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0002987329290542,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.250569569710525e-13,
+          2.2483425914612254e-13,
+          6.388053465125657e-14,
+          9.793291305684316e-13
+        ],
+        "checkpoint": "ladder-07/state-ns16.npz",
+        "checkpoint_sha256": "07cda093f28c17f6a95fc0acd709813e9ed1b5e03f7cb857670758e9605c5c11"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.826987977938194e-13,
+          2.0207398207919156e-13,
+          3.0180128923118184e-14,
+          9.396944473409285e-13
+        ],
+        "checkpoint": "ladder-07/state-ns24.npz",
+        "checkpoint_sha256": "a67a73b60764f9ab417fdfc8b2f57755da3c4b04dca331cc55628e295b7f06fa"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855913931573853e-13,
+          3.0776168839049235e-13,
+          1.0363627419413657e-14,
+          5.242547054111856e-13
+        ],
+        "checkpoint": "ladder-07/state-ns32.npz",
+        "checkpoint_sha256": "41dae45cbc3e087621e715a95e2fe1bea4942b4b6167ca90910435e24a3f3c68"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0003987329290542,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.258081070467247e-13,
+          2.2482753069523495e-13,
+          6.393711210524029e-14,
+          9.833260722182715e-13
+        ],
+        "checkpoint": "ladder-08/state-ns16.npz",
+        "checkpoint_sha256": "2c8ad5eded87996e796931118890a6fd7d0ee7daa2aef5252442192277e4ccb2"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.968689053817348e-13,
+          2.0951338116536337e-13,
+          3.145153669542849e-14,
+          9.559456092611918e-13
+        ],
+        "checkpoint": "ladder-08/state-ns24.npz",
+        "checkpoint_sha256": "c559fa8c5c694f02ec52a8b37a3e8e3625e2cd8474f8cd5811d00e500c5d3cd6"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.893741453373792e-13,
+          3.091464373506565e-13,
+          1.0372794185759026e-14,
+          5.288967497549765e-13
+        ],
+        "checkpoint": "ladder-08/state-ns32.npz",
+        "checkpoint_sha256": "9bfde8588f0d2876281e9bbb2668c6605b9082dc1467fb1573a3e9a9440bbd56"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0001987329290543,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.245264012093574e-13,
+          2.2582629893439563e-13,
+          6.414411300463784e-14,
+          9.713181780535458e-13
+        ],
+        "checkpoint": "ladder-09/state-ns16.npz",
+        "checkpoint_sha256": "089bf8d6f3d6ad0338604b713c2ce7e601c229daae6b3b6e4134a022ea47ac5f"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.881869369191571e-13,
+          2.0181217484243703e-13,
+          3.0150975351717696e-14,
+          9.410201202481923e-13
+        ],
+        "checkpoint": "ladder-09/state-ns24.npz",
+        "checkpoint_sha256": "c99b2693c0faed98b50a1b85da4f54b211244632aaef2dee44408aa9792c26b6"
+      },
+      {
+        "ns": 32,
+        "iterations": 536,
+        "accepted": true,
+        "residuals": [
+          9.988412668635647e-13,
+          3.1654091449589514e-13,
+          1.0354119801056581e-14,
+          5.523942431022938e-13
+        ],
+        "checkpoint": "ladder-09/state-ns32.npz",
+        "checkpoint_sha256": "faaf4cd05703b244d34ac590410ebdb1e0d0cb71242da07d7aedbe7aa8705f61"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0003000555047237,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.251361299581809e-13,
+          2.2486266285244787e-13,
+          6.388783414503262e-14,
+          9.7898439864914e-13
+        ],
+        "checkpoint": "ladder-10/state-ns16.npz",
+        "checkpoint_sha256": "ed7bb0987d6a68f0d36c0b2b9575651bcd3245240ca712de9230ca259658a5c2"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.8265879942742e-13,
+          2.020838555434117e-13,
+          3.018131907285367e-14,
+          9.397075532481125e-13
+        ],
+        "checkpoint": "ladder-10/state-ns24.npz",
+        "checkpoint_sha256": "75c26e6c04366ce91f252babf5a9217e7a414860c85daae6bedb7569c638b673"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855994294018592e-13,
+          3.0775097859583186e-13,
+          1.0363437986030033e-14,
+          5.242750365907696e-13
+        ],
+        "checkpoint": "ladder-10/state-ns32.npz",
+        "checkpoint_sha256": "785e7b3999181981bf99f1c5088ab2655d09cf688df9e091f0bd08fddcaef7a4"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0003000555047237,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.251361299581809e-13,
+          2.2486266285244787e-13,
+          6.388783414503262e-14,
+          9.7898439864914e-13
+        ],
+        "checkpoint": "ladder-11/state-ns16.npz",
+        "checkpoint_sha256": "ed7bb0987d6a68f0d36c0b2b9575651bcd3245240ca712de9230ca259658a5c2"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.8265879942742e-13,
+          2.020838555434117e-13,
+          3.018131907285367e-14,
+          9.397075532481125e-13
+        ],
+        "checkpoint": "ladder-11/state-ns24.npz",
+        "checkpoint_sha256": "75c26e6c04366ce91f252babf5a9217e7a414860c85daae6bedb7569c638b673"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855994294018592e-13,
+          3.0775097859583186e-13,
+          1.0363437986030033e-14,
+          5.242750365907696e-13
+        ],
+        "checkpoint": "ladder-11/state-ns32.npz",
+        "checkpoint_sha256": "785e7b3999181981bf99f1c5088ab2655d09cf688df9e091f0bd08fddcaef7a4"
+      }
+    ]
+  },
+  {
+    "current_factor": 1.0003,
+    "stages": [
+      {
+        "ns": 16,
+        "iterations": 1194,
+        "accepted": true,
+        "residuals": [
+          8.251439218023296e-13,
+          2.2487053172493552e-13,
+          6.388834138564056e-14,
+          9.789663771415225e-13
+        ],
+        "checkpoint": "ladder-12/state-ns16.npz",
+        "checkpoint_sha256": "030933bb4143d7d346acda20b52449fb36b69e93c9a1fe64ff20d98bf2485c69"
+      },
+      {
+        "ns": 24,
+        "iterations": 554,
+        "accepted": true,
+        "residuals": [
+          9.826610192495563e-13,
+          2.0208290410295894e-13,
+          3.0181264421100215e-14,
+          9.397068798135147e-13
+        ],
+        "checkpoint": "ladder-12/state-ns24.npz",
+        "checkpoint_sha256": "edd017e7047a68f73b478d4aff46600fedf45eb6f589249b458f2150a7899ce4"
+      },
+      {
+        "ns": 32,
+        "iterations": 537,
+        "accepted": true,
+        "residuals": [
+          9.855998008896833e-13,
+          3.077509435649507e-13,
+          1.0363444441142188e-14,
+          5.242742545610072e-13
+        ],
+        "checkpoint": "ladder-12/state-ns32.npz",
+        "checkpoint_sha256": "7c97b28bc920dcf126b09be532a8744c6d03998ba755d8be5011987cb4e1df0b"
+      }
+    ]
+  }
+]

@@ -540,8 +540,20 @@ def _initialize_currents_scale(currents, currents_scale):
     """Return a fixed current scale for normalized current dofs."""
     currents = jnp.atleast_1d(jnp.asarray(currents))
     if currents_scale is None:
-        return jnp.mean(jnp.abs(currents))
-    return currents_scale
+        if isinstance(currents, jax.core.Tracer):
+            raise ValueError("Constructing coils with traced currents requires a fixed currents_scale")
+        currents_scale = float(jnp.mean(jnp.abs(currents)))
+        if currents_scale == 0.0:
+            currents_scale = 1.0
+    if isinstance(currents_scale, jax.core.Tracer):
+        raise ValueError("currents_scale must be fixed outside JAX transformations")
+    # PyTree metadata participates in compilation-cache equality. JAX arrays
+    # here can recursively enter that cache while its mutex is held.
+    import math
+    scale = float(currents_scale)
+    if not math.isfinite(scale) or scale <= 0:
+        raise ValueError("currents_scale must be positive and finite")
+    return scale
 
 def _normalize_base_currents(currents, curves):
     """Return base currents as a 1D array matching the number of base curves."""
@@ -641,6 +653,7 @@ class Coils:
     
     @currents_scale.setter
     def currents_scale(self, new_currents_scale):
+        new_currents_scale = _initialize_currents_scale(self.dofs_currents_raw, new_currents_scale)
         self._dofs_currents_raw = self.dofs_currents * new_currents_scale
         self._currents_scale = new_currents_scale
         self._currents = None
@@ -1339,6 +1352,7 @@ class DiscretizedCoils:
     
     @currents_scale.setter
     def currents_scale(self, new_currents_scale):
+        new_currents_scale = _initialize_currents_scale(self.dofs_currents_raw, new_currents_scale)
         self._dofs_currents_raw = self.dofs_currents * new_currents_scale
         self._currents_scale = new_currents_scale
         self._currents = None

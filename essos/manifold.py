@@ -605,6 +605,7 @@ def trace_manifold_branch(
     newton_iterations: int = 8,
     newton_damping: float = 1.0,
     bphi_floor: float = 0.0,
+    derivative_mode: str = "frozen_reference",
 ) -> ManifoldBranchTrace:
     """Trace one fixed-label stable or unstable branch of an ESSOS field.
 
@@ -631,12 +632,25 @@ def trace_manifold_branch(
         bphi_floor=bphi_floor,
     )
 
+    if derivative_mode not in {"frozen_reference", "moving_linear_seed"}:
+        raise ValueError("Unsupported manifold derivative_mode")
+    if derivative_mode == "moving_linear_seed":
+        from pyna.topo.jax_manifold import moving_eigenpair
+        from pyna.toroidal.flt.jax_poincare import poincare_map
+        monodromy = jax.jacfwd(lambda rz: poincare_map(
+            essos_field_callable, field, rz, phi_span=anchor_span*map_power,
+            phi_start=phi_start, n_steps=n_steps_per_span*map_power,
+            bphi_floor=bphi_floor))(anchor)
+        # The selected branch expands under its propagation map, including
+        # the backward map used for a stable physical branch.
+        branch_direction = moving_eigenpair(monodromy, branch_direction).direction
     manifold_seed_segment, trace_manifold_generations = _pyna_manifold_api()
     seeds = manifold_seed_segment(
         anchor,
         branch_direction,
         seed_distances,
         side=side,
+        derivative_mode=derivative_mode,
     )
     generations = trace_manifold_generations(
         essos_field_callable,
@@ -674,6 +688,7 @@ def trace_manifold_wall_strike(
     xline_residual_tolerance: float = 1.0e-10,
     wall_residual_tolerance: float = 1.0e-10,
     minimum_abs_transversality: float = 1.0e-8,
+    derivative_mode: str = "frozen_reference",
 ) -> Any:
     """Trace one PyNA-labelled manifold seed to its local wall plane.
 
@@ -699,6 +714,7 @@ def trace_manifold_wall_strike(
         xline_residual_tolerance=xline_residual_tolerance,
         wall_residual_tolerance=wall_residual_tolerance,
         minimum_abs_transversality=minimum_abs_transversality,
+        derivative_mode=derivative_mode,
     )
 
 
@@ -719,6 +735,7 @@ def trace_manifold_wall_strike_bundle(
     xline_residual_tolerance: float = 1.0e-10,
     wall_residual_tolerance: float = 1.0e-10,
     minimum_abs_transversality: float = 1.0e-8,
+    derivative_mode: str = "frozen_reference",
 ) -> Any:
     """Trace ordered PyNA-labelled seeds to frozen local wall planes.
 
@@ -744,6 +761,7 @@ def trace_manifold_wall_strike_bundle(
         xline_residual_tolerance=xline_residual_tolerance,
         wall_residual_tolerance=wall_residual_tolerance,
         minimum_abs_transversality=minimum_abs_transversality,
+        derivative_mode=derivative_mode,
     )
 
 
@@ -764,6 +782,7 @@ def trace_manifold_wall_strike_bundle_trajectories(
     xline_residual_tolerance: float = 1.0e-10,
     wall_residual_tolerance: float = 1.0e-10,
     minimum_abs_transversality: float = 1.0e-8,
+    derivative_mode: str = "frozen_reference",
 ) -> Any:
     """Retain all JAX states from exact labelled seeds to wall events."""
 
@@ -784,6 +803,7 @@ def trace_manifold_wall_strike_bundle_trajectories(
         xline_residual_tolerance=xline_residual_tolerance,
         wall_residual_tolerance=wall_residual_tolerance,
         minimum_abs_transversality=minimum_abs_transversality,
+        derivative_mode=derivative_mode,
     )
 
 

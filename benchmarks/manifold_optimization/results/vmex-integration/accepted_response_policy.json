@@ -1,0 +1,22 @@
+{
+  "policy": "user_accepted_measured_response_for_next_plan_stage",
+  "user_request": "0.17 - 0.23 % is fine let's move to the next part of the plan",
+  "scope": {
+    "configuration": "LI383/NCSX free-boundary equilibrium",
+    "control": "common coil-current factor",
+    "radial_surfaces": [
+      32,
+      64
+    ],
+    "query_point_cartesian_m": [
+      3.2,
+      0.0,
+      0.1
+    ]
+  },
+  "maximum_observed_relative_error": 0.0023356831093499166,
+  "original_strict_relative_tolerance": 0.001,
+  "strict_reports_preserved": true,
+  "new_universal_tolerance": null,
+  "decision": "Proceed with exterior-domain and tracing qualification; retain measured response approximation in subsequent design reports."
+}

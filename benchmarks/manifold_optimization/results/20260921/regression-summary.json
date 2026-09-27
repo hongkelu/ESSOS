@@ -1,0 +1,39 @@
+{
+  "status": "passed",
+  "unique_required_tests": 262,
+  "lanes": {
+    "analytic": {
+      "tests": 206,
+      "manifest_sha256": "7f1103bc54f1b8f48849fa3d45a2d0ecd5fac3ca65a154098a51d58f94cb7603",
+      "artifact_directory": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/verified-20260921/analytic"
+    },
+    "production": {
+      "tests": 50,
+      "manifest_sha256": "650cdc1c5319d4f8cf41d46bc9e727c415baf3bc65d4ff01f87f6fbb89bd0abc",
+      "artifact_directory": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/verified-20260921/production"
+    },
+    "qa": {
+      "tests": 1,
+      "manifest_sha256": "9b9cf92df65082050910a4d47edb9324c04bade9707b030031e87312f614bdec",
+      "artifact_directory": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/verified-20260921/qa"
+    },
+    "tokamak": {
+      "tests": 5,
+      "manifest_sha256": "95a40802dd8243858345478464bc7644c5cd812f07af6cf34943356fb03bbc19",
+      "artifact_directory": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/verified-20260921/tokamak"
+    }
+  },
+  "post_audit_rechecks": {
+    "cartesian_hit_correspondence": {
+      "passed": 2,
+      "log_sha256": "c8698cf745996799a47dd87d00b4c895f183efe1ab5b7f76092ac470e958fbe5"
+    },
+    "strictly_interior_launch": {
+      "passed": 1,
+      "log_sha256": "aac9ed2c72fb278360783b8bc46b60d93bbd3148fb52ad37fb74f1487df8ed96"
+    }
+  },
+  "note": "Post-audit checks repeat existing tests after the final correspondence/launch guards; they are not added to the unique test count.",
+  "installed_wheel_native_rechecks": 4,
+  "installed_wheel_status": "passed"
+}

@@ -1,0 +1,10 @@
+{
+  "valid": true,
+  "tests": 4,
+  "adapter": "/tmp/manifold-vmex-release-58716831/essos/vmex_field.py",
+  "slurm_job_id": "58716831",
+  "native": "/tmp/manifold-vmex-release-58716831/pyna/_cyna/_cyna_ext.so",
+  "adapter_sha256": "468f3fdcb438f044764a909231cc2c40a8214c24bb6825a8efba8ffb35cdf473",
+  "native_sha256": "377e681fd8f1484a24a2bad815ce60173047ea2835f1421c7abda3e771ce1c6c",
+  "test_sha256": "6e00f570c52830af559afec453410aa9b3cf7719f5d982a3ea1d71128251dffc"
+}

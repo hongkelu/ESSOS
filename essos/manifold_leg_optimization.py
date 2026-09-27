@@ -53,8 +53,11 @@ class ManifoldLegStage2Target:
     xline_residual_tolerance: float = 1.0e-10
     wall_residual_tolerance: float = 1.0e-10
     minimum_abs_transversality: float = 1.0e-8
+    derivative_mode: str = "frozen_reference"
 
     def __post_init__(self) -> None:
+        if self.derivative_mode not in ("frozen_reference", "moving_linear_seed"):
+            raise ValueError("Unsupported derivative_mode")
         matches, planes = tuple(self.strike_matches), tuple(self.wall_planes)
         if not matches or len(matches) != len(planes):
             raise ValueError(
@@ -128,7 +131,7 @@ _TRACE_CONTROLS = (
     "maximum_phi_shift", "n_steps_per_span", "xline_newton_iterations",
     "xline_newton_damping", "wall_n_steps", "wall_newton_iterations",
     "wall_newton_damping", "bphi_floor", "xline_residual_tolerance",
-    "wall_residual_tolerance", "minimum_abs_transversality",
+    "wall_residual_tolerance", "minimum_abs_transversality", "derivative_mode",
 )
 
 
@@ -249,6 +252,7 @@ def trace_manifold_leg_reference(
         xline_residual_tolerance=target_state.xline_residual_tolerance,
         wall_residual_tolerance=target_state.wall_residual_tolerance,
         minimum_abs_transversality=target_state.minimum_abs_transversality,
+        derivative_mode=target_state.derivative_mode,
     )
 
 

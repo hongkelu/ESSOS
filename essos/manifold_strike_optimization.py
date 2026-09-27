@@ -87,8 +87,12 @@ class ManifoldStrikeStage2Target:
     xline_residual_tolerance: float = 1.0e-10
     wall_residual_tolerance: float = 1.0e-10
     minimum_abs_transversality: float = 1.0e-8
+    derivative_mode: str = "frozen_reference"
 
     def __post_init__(self) -> None:
+        from pyna.topo.snapshot import immutable_array
+        if self.derivative_mode not in ("frozen_reference", "moving_linear_seed"):
+            raise ValueError("Unsupported derivative_mode")
         (
             ManifoldBranchReference,
             ManifoldStrikeMatch,
@@ -124,8 +128,8 @@ class ManifoldStrikeStage2Target:
         if not np.isfinite(maximum_phi_shift) or maximum_phi_shift <= 0.0:
             raise ValueError("maximum_phi_shift must be positive and finite")
 
-        object.__setattr__(self, "target_position_m", target.copy())
-        object.__setattr__(self, "position_scales_m", scales.copy())
+        object.__setattr__(self, "target_position_m", immutable_array(target))
+        object.__setattr__(self, "position_scales_m", immutable_array(scales))
         object.__setattr__(self, "maximum_phi_shift", maximum_phi_shift)
         for attribute in (
             "n_steps_per_span",
@@ -192,6 +196,7 @@ def trace_manifold_strike_reference(
         xline_residual_tolerance=target_state.xline_residual_tolerance,
         wall_residual_tolerance=target_state.wall_residual_tolerance,
         minimum_abs_transversality=target_state.minimum_abs_transversality,
+        derivative_mode=target_state.derivative_mode,
     )
 
 

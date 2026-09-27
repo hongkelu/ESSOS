@@ -1,0 +1,166 @@
+{
+  "valid": true,
+  "tolerance_m": 0.0001,
+  "rows": [
+    {
+      "step_refinement_difference_m": null,
+      "grid": [
+        31,
+        31,
+        32
+      ],
+      "steps": 128,
+      "complete": true,
+      "maximum_invariance_error_m": 0.005182352325116924,
+      "grid_build_seconds": 1.1638954260270111,
+      "trace_seconds": 0.016748342954088002
+    },
+    {
+      "step_refinement_difference_m": 1.207323564442074e-05,
+      "grid": [
+        31,
+        31,
+        32
+      ],
+      "steps": 256,
+      "complete": true,
+      "maximum_invariance_error_m": 0.005178107649365286,
+      "grid_build_seconds": 1.1638954260270111,
+      "trace_seconds": 0.03287251299479976
+    },
+    {
+      "step_refinement_difference_m": 1.718549438314867e-06,
+      "grid": [
+        31,
+        31,
+        32
+      ],
+      "steps": 512,
+      "complete": true,
+      "maximum_invariance_error_m": 0.005179164941340653,
+      "grid_build_seconds": 1.1638954260270111,
+      "trace_seconds": 0.06528009905014187
+    },
+    {
+      "step_refinement_difference_m": 6.300484649324239e-07,
+      "grid": [
+        31,
+        31,
+        32
+      ],
+      "steps": 1024,
+      "complete": true,
+      "maximum_invariance_error_m": 0.005179208090942796,
+      "grid_build_seconds": 1.1638954260270111,
+      "trace_seconds": 0.1312386369681917
+    },
+    {
+      "step_refinement_difference_m": null,
+      "grid": [
+        61,
+        61,
+        64
+      ],
+      "steps": 128,
+      "complete": true,
+      "maximum_invariance_error_m": 0.001289339732606896,
+      "grid_build_seconds": 4.916594173002522,
+      "trace_seconds": 0.02083547500660643
+    },
+    {
+      "step_refinement_difference_m": 5.603925640900906e-06,
+      "grid": [
+        61,
+        61,
+        64
+      ],
+      "steps": 256,
+      "complete": true,
+      "maximum_invariance_error_m": 0.0012869363368964775,
+      "grid_build_seconds": 4.916594173002522,
+      "trace_seconds": 0.03715529799228534
+    },
+    {
+      "step_refinement_difference_m": 1.3330106687773034e-06,
+      "grid": [
+        61,
+        61,
+        64
+      ],
+      "steps": 512,
+      "complete": true,
+      "maximum_invariance_error_m": 0.0012872671253494898,
+      "grid_build_seconds": 4.916594173002522,
+      "trace_seconds": 0.07303941500140354
+    },
+    {
+      "step_refinement_difference_m": 4.662439820458876e-07,
+      "grid": [
+        61,
+        61,
+        64
+      ],
+      "steps": 1024,
+      "complete": true,
+      "maximum_invariance_error_m": 0.0012874588758466435,
+      "grid_build_seconds": 4.916594173002522,
+      "trace_seconds": 0.13969128602184355
+    },
+    {
+      "step_refinement_difference_m": null,
+      "grid": [
+        121,
+        121,
+        256
+      ],
+      "steps": 128,
+      "complete": true,
+      "maximum_invariance_error_m": 3.5315432163736244e-05,
+      "grid_build_seconds": 75.56603544601239,
+      "trace_seconds": 0.029677704034838825
+    },
+    {
+      "step_refinement_difference_m": 8.056259537403987e-05,
+      "grid": [
+        121,
+        121,
+        256
+      ],
+      "steps": 256,
+      "complete": true,
+      "maximum_invariance_error_m": 7.60923743007127e-05,
+      "grid_build_seconds": 75.56603544601239,
+      "trace_seconds": 0.046357562008779496
+    },
+    {
+      "step_refinement_difference_m": 1.1761427183688812e-06,
+      "grid": [
+        121,
+        121,
+        256
+      ],
+      "steps": 512,
+      "complete": true,
+      "maximum_invariance_error_m": 7.578761270366794e-05,
+      "grid_build_seconds": 75.56603544601239,
+      "trace_seconds": 0.08062783599598333
+    },
+    {
+      "step_refinement_difference_m": 4.37971307404767e-07,
+      "grid": [
+        121,
+        121,
+        256
+      ],
+      "steps": 1024,
+      "complete": true,
+      "maximum_invariance_error_m": 7.592319330175927e-05,
+      "grid_build_seconds": 75.56603544601239,
+      "trace_seconds": 0.15174685698002577
+    }
+  ],
+  "elapsed_seconds": 82.47230258898344,
+  "coil_sha256": "e4d3dbd85d2719f2cea86af4e2bab98056ef21579acb9f44d33855db97687c09",
+  "field_mode": "vacuum_coils",
+  "slurm_job_id": "58705967"
+}

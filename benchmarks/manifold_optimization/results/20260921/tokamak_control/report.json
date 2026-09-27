@@ -1,0 +1,87 @@
+{
+  "case": "tokamak prescribed-background manifold sample",
+  "status": "numerical_floor_reached",
+  "initial_objective": 0.025906893327268796,
+  "final_objective": 5.871001572736979e-13,
+  "parameters": [
+    1.0003000068942844,
+    -1.1990000067863917
+  ],
+  "trials": [
+    {
+      "accepted": true,
+      "actual_decrease": 0.02315309586342402,
+      "diagnostics": {
+        "jax_cyna_deviation_m": 9.591620020887351e-05,
+        "sample_displacement_m": 0.0001548521700756881
+      },
+      "iteration": 0,
+      "predicted_decrease": 0.022907467329872106,
+      "q": [
+        0.07607524086795545,
+        0.1849663691779741
+      ],
+      "radius": 0.2,
+      "ratio": 1.0107226403519347,
+      "status": "accepted"
+    },
+    {
+      "accepted": true,
+      "actual_decrease": 0.0027521032149546523,
+      "diagnostics": {
+        "jax_cyna_deviation_m": 9.745564397959928e-05,
+        "sample_displacement_m": 7.591666742307618e-05
+      },
+      "iteration": 1,
+      "predicted_decrease": 0.002753797463844779,
+      "q": [
+        0.3123822314073338,
+        0.19737887268674084
+      ],
+      "radius": 0.4,
+      "ratio": 0.9993847590781926,
+      "status": "accepted"
+    },
+    {
+      "accepted": true,
+      "actual_decrease": 1.6932940670204744e-06,
+      "diagnostics": {
+        "jax_cyna_deviation_m": 9.742066367690487e-05,
+        "sample_displacement_m": 1.8844307130138848e-06
+      },
+      "iteration": 2,
+      "predicted_decrease": 1.6942488857645305e-06,
+      "q": [
+        0.2997253118166672,
+        0.20005321772713078
+      ],
+      "radius": 0.4,
+      "ratio": 0.9994364353714035,
+      "status": "accepted"
+    },
+    {
+      "accepted": true,
+      "actual_decrease": 9.542360060791118e-10,
+      "diagnostics": {
+        "jax_cyna_deviation_m": 9.742153387974509e-05,
+        "sample_displacement_m": 4.478306778628656e-08
+      },
+      "iteration": 3,
+      "predicted_decrease": 9.548230298804156e-10,
+      "q": [
+        0.3000068942845456,
+        0.19999864272165152
+      ],
+      "radius": 0.4,
+      "ratio": 0.9993852014635871,
+      "status": "accepted"
+    }
+  ],
+  "target_RZ_m": [
+    1.470013598221895,
+    -0.09005013192901173
+  ],
+  "bounds_kind": "numerical regression bounds",
+  "elapsed_seconds": 152.68965117598418,
+  "slurm_job_id": "58705967"
+}

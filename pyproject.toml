@@ -50,8 +50,14 @@ dependencies = [
 #   pip install git+https://github.com/uwplasma/pyQSC_JAX.git 
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+vmex = ["vmex[freeb]>=0.9.1,<0.10", "jax>=0.9.2", "scipy>=1.16,<1.17"]
+
 [project.urls]
 Homepage = "https://github.com/uwplasma/ESSOS"
 
 [project.scripts]
 essos = "essos.__main__:main"
+
+[tool.setuptools.package-data]
+essos = ["data/manifold_optimization/*"]

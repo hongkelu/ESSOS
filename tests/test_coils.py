@@ -189,3 +189,15 @@ def test_curves_iter():
 
 if __name__ == "__main__":
     pytest.main()
+
+
+def test_current_normalization_is_safe_static_pytree_metadata():
+    import numpy as np
+    import pytest
+    curves=Curves(jnp.zeros((1,3,3)),n_segments=8,nfp=1,stellsym=False)
+    coils=Coils(curves,jnp.array([2.]))
+    assert isinstance(coils.currents_scale,float)
+    np.testing.assert_allclose(jax.jit(lambda c:Coils(curves,c,currents_scale=2.).currents)(jnp.array([3.])),[3.])
+    with pytest.raises(ValueError,match='fixed currents_scale'):
+        jax.jit(lambda c:Coils(curves,c).currents)(jnp.array([3.]))
+    assert Coils(curves,jnp.zeros(1)).currents_scale==1.

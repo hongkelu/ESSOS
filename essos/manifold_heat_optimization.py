@@ -98,8 +98,12 @@ class ManifoldHeatStage2Target:
     xline_residual_tolerance: float = 1.0e-10
     wall_residual_tolerance: float = 1.0e-10
     minimum_abs_transversality: float = 1.0e-8
+    derivative_mode: str = "frozen_reference"
 
     def __post_init__(self) -> None:
+        from pyna.topo.snapshot import immutable_array
+        if self.derivative_mode not in ("frozen_reference", "moving_linear_seed"):
+            raise ValueError("Unsupported derivative_mode")
         (
             ManifoldBranchReference,
             ManifoldStrikeMatch,
@@ -161,10 +165,10 @@ class ManifoldHeatStage2Target:
 
         object.__setattr__(self, "strike_matches", matches)
         object.__setattr__(self, "wall_planes", planes)
-        object.__setattr__(self, "strike_powers_W", powers.copy())
+        object.__setattr__(self, "strike_powers_W", immutable_array(powers))
         object.__setattr__(self, "power_provenance", provenance)
-        object.__setattr__(self, "wall_cell_centers_xyz_m", centers.copy())
-        object.__setattr__(self, "wall_cell_areas_m2", areas.copy())
+        object.__setattr__(self, "wall_cell_centers_xyz_m", immutable_array(centers))
+        object.__setattr__(self, "wall_cell_areas_m2", immutable_array(areas))
         for attribute in (
             "deposition_width_m",
             "heat_flux_scale_W_m2",
@@ -298,6 +302,7 @@ def trace_manifold_heat_reference(
         xline_residual_tolerance=target_state.xline_residual_tolerance,
         wall_residual_tolerance=target_state.wall_residual_tolerance,
         minimum_abs_transversality=target_state.minimum_abs_transversality,
+        derivative_mode=target_state.derivative_mode,
     )
 
 

@@ -230,6 +230,7 @@ class ManifoldStage2Target:
     newton_iterations: int = 8
     newton_damping: float = 1.0
     bphi_floor: float = 0.0
+    derivative_mode: str = "frozen_reference"
 
     def __post_init__(self) -> None:
         (
@@ -257,6 +258,9 @@ class ManifoldStage2Target:
         ):
             raise ValueError("sample_match point disagrees with branch_reference")
 
+        if self.derivative_mode not in ("frozen_reference", "moving_linear_seed"):
+            raise ValueError("Unsupported derivative_mode")
+        from pyna.topo.snapshot import immutable_array
         target = _finite_rz(self.target_RZ_m, "target_RZ_m")
         scales = _finite_rz(self.rz_scales_m, "rz_scales_m")
         if np.any(scales <= 0.0):
@@ -270,8 +274,8 @@ class ManifoldStage2Target:
         if not np.isfinite(bphi_floor) or bphi_floor < 0.0:
             raise ValueError("bphi_floor must be non-negative and finite")
 
-        object.__setattr__(self, "target_RZ_m", target.copy())
-        object.__setattr__(self, "rz_scales_m", scales.copy())
+        object.__setattr__(self, "target_RZ_m", immutable_array(target))
+        object.__setattr__(self, "rz_scales_m", immutable_array(scales))
         object.__setattr__(self, "n_steps_per_span", steps)
         object.__setattr__(self, "newton_iterations", iterations)
         object.__setattr__(self, "newton_damping", damping)
@@ -290,6 +294,7 @@ def trace_manifold_reference(
     newton_iterations: int = 8,
     newton_damping: float = 1.0,
     bphi_floor: float = 0.0,
+    derivative_mode: str = "frozen_reference",
 ):
     """Trace JAX generations for one accepted PyNA production reference."""
 
@@ -311,6 +316,7 @@ def trace_manifold_reference(
         newton_iterations=newton_iterations,
         newton_damping=newton_damping,
         bphi_floor=bphi_floor,
+        derivative_mode=derivative_mode,
     )
 
 
@@ -330,6 +336,7 @@ def manifold_stage2_target_loss(
         newton_iterations=target_state.newton_iterations,
         newton_damping=target_state.newton_damping,
         bphi_floor=target_state.bphi_floor,
+        derivative_mode=target_state.derivative_mode,
     )
     label = target_state.sample_match.label
     sample = trace.generations[

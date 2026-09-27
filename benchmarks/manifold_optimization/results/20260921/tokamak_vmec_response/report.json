@@ -1,0 +1,47 @@
+{
+  "case": "tokamak",
+  "response_method": "discrete",
+  "coordinate_convention": "fixed_vmec_flux_grid_labels",
+  "parameter_names": [
+    "rc(1,0)"
+  ],
+  "response_qualified": true,
+  "response_tolerance": 0.001,
+  "force_tolerance": 1e-13,
+  "finite_differences": [
+    {
+      "step": 0.001,
+      "relative_error": 1.6527819473259974e-05,
+      "primal_converged": true
+    },
+    {
+      "step": 0.0003,
+      "relative_error": 3.13620209036069e-05,
+      "primal_converged": true
+    },
+    {
+      "step": 0.0001,
+      "relative_error": 3.163473108828691e-05,
+      "primal_converged": true
+    },
+    {
+      "step": 3e-05,
+      "relative_error": 3.1649669839140394e-05,
+      "primal_converged": true
+    },
+    {
+      "step": 1e-05,
+      "relative_error": 3.164442118495769e-05,
+      "primal_converged": true
+    }
+  ],
+  "transpose_error": 1.4210854715202004e-14,
+  "force_residuals": [
+    9.978272416943279e-14,
+    7.726738927722612e-14,
+    3.894395720444915e-14
+  ],
+  "elapsed_seconds": 47.89513232803438,
+  "limitation": "fixed-boundary material-grid field response; no Eulerian/open-region or coil-response claim",
+  "slurm_job_id": "58705967"
+}

@@ -1,0 +1,40 @@
+{
+  "independent_qualification": false,
+  "source_run": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/vmex-20260922/li383-continuation-16-24-32",
+  "step": 0.0001,
+  "explanation": "Finite-difference state and constraint drift attribute error; they do not qualify a corrected derivative.",
+  "state_direction_norm": 1.4324885481151526,
+  "inactive_direction_norm": 0.014780243248664324,
+  "rcon_direction_norm": 0.0,
+  "zcon_direction_norm": 0.0,
+  "components": [
+    {
+      "component": 0,
+      "finite_difference": -0.0032054385790038914,
+      "native": -0.0031924418628205315,
+      "inactive_explicit": 4.212079392585033e-06,
+      "nuisance_implicit": -1.7183658825874838e-05,
+      "explained_response": -0.0032054134422538215,
+      "remaining_difference": -2.5136750070134e-08
+    },
+    {
+      "component": 1,
+      "finite_difference": -0.02845010227743583,
+      "native": -0.028407203836292676,
+      "inactive_explicit": -0.0013430773674580538,
+      "nuisance_implicit": 0.001300163456965514,
+      "explained_response": -0.028450117746785217,
+      "remaining_difference": 1.546934938695746e-08
+    },
+    {
+      "component": 2,
+      "finite_difference": 0.020637113299221133,
+      "native": 0.020567932877451855,
+      "inactive_explicit": 0.0006579052965397864,
+      "nuisance_implicit": -0.0005889450299928462,
+      "explained_response": 0.020636893143998795,
+      "remaining_difference": 2.2015522233758203e-07
+    }
+  ],
+  "remaining_relative_difference": 6.2937948329622765e-06
+}

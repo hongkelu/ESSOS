@@ -1,0 +1,200 @@
+{
+  "case": "li383_ncsx_free_boundary_pilot",
+  "slurm_job_id": "58719990",
+  "versions": {
+    "vmex": "0.9.1",
+    "virtual-casing-jax": "0.0.7",
+    "jax": "0.9.2",
+    "scipy": "1.16.3"
+  },
+  "input_sha256": {
+    "li383.vmec": "adcea5bf869c41127048e4fd32edcbdbd38865a8e81985e8d0bb671c6db9e6e4",
+    "ncsx_coils.json": "e4d3dbd85d2719f2cea86af4e2bab98056ef21579acb9f44d33855db97687c09"
+  },
+  "pressure_current_flux": "unchanged from LI383 deck",
+  "include_edge_in_convergence": true,
+  "radial_resolution": 64,
+  "force_tolerance": 1e-12,
+  "field_grid": {
+    "R": [
+      0.65,
+      2.2,
+      96
+    ],
+    "Z": [
+      -0.85,
+      0.85,
+      96
+    ],
+    "nphi": 64,
+    "nfp": 3
+  },
+  "coil_quadrature": 256,
+  "response_tolerance": 0.001,
+  "physical_design_qualified": false,
+  "vmex_runtime_sources": {
+    "__init__.py": "17bc5d2e30dafb839110ba31f5d0e85262685a605ecc8fd15823e04093aa0306",
+    "__main__.py": "61c4f74944ce688c19adfb396dc79855085720d6064a54199e74acce6d9ba5b1",
+    "_compat.py": "901ae7a5bd98fa3109f87125f8f4e1ecafd350389ab6157dce6f56b432e4ab71",
+    "core/__init__.py": "6edd5c05a9e8be50973cd2945421c97e0168ffd077d00336aa5ec4a3b939d184",
+    "core/_freeboundary_dense.py": "490c2c1a3c279056d9f58ece96c3fefd19f13f330b57e5de6c09e3ce0e85d640",
+    "core/_netcdf.py": "9389b2d3df9e1192176a30054a1836dd5cf16fa7372c34d515b0f5cc1de69997",
+    "core/bootstrap.py": "394845cd898bc81cc48f046935b27f0b97299a52f64d08e1db4d27146e59df29",
+    "core/boozer.py": "2553e00912ced2be18d1e67d11a7286e162d7ce24b9c19d0859cb4d4e9c0c246",
+    "core/boozer_tables.py": "cebd4c14114c0353813af56129d6a099d5dae5f76e5d304f37a870afb8bffeed",
+    "core/bounce.py": "f0afc2b60c963b79cfb263c2ff6dd93f2c936b77f2171d815fd5bdfe75d52ebb",
+    "core/cli.py": "0da9d3bbacf64a6270a01fa3011ce016e9004bebc5e240b91cabf141846d0f04",
+    "core/desc.py": "367d14674e879a088337b69449d5be3538c2a7c96a8ee45e8a9835b5c364db50",
+    "core/device.py": "3b52c52f8d7a3d9641b1276150ce63620e80117ed8f898f44f5b19120c6ef74f",
+    "core/errors.py": "5200acbdee5682f56fff654db7cb47c5d8d09d9980c6d3c6497170812b803a3d",
+    "core/extender.py": "4a061b9cb4696d874ea6659382e9ad8fceac6288dc0635078005e7dcee5e48d6",
+    "core/fields.py": "18d7543235cf4a5ed7b61dbd6eea1a0c59618e4a37cd68f787eb7f8519f4c12f",
+    "core/forces.py": "62d070b10e583c0c80bd6a32e1014f778dda2ab4ec7fee02ddfc6cc51f7c631a",
+    "core/fourier.py": "cf433ce09b0e3dd5a7944fb67a877e93f8eb3d7c644ba10ed21d9b055c64ef6a",
+    "core/freeboundary.py": "027ad55ed42c6757c64a9f79d6d3e535ac11c74d2e5f116bda504f61c33e756b",
+    "core/freeboundary_continuation.py": "aff3282e74f3321505a1506376f192bbf624cf114a7142f31811fc740bd8bd46",
+    "core/freeboundary_implicit.py": "2da2473d7349cf0e06403fe5b85bbef0bec224f5a44c24db9e1dd673251d350e",
+    "core/gammac.py": "a49bb807bbad6095aae8577bb4fdeff9242547abff80bb2d8a31d3738e4e965e",
+    "core/geometry.py": "db11ca436faf1c7354b92e599f8bcc0e102013d5de622e45137e41536ef0195b",
+    "core/implicit.py": "9ef8465340e8ec69bf036bc710de651b4c66c0ac06e29c405f7fd57b77e1cd1a",
+    "core/input.py": "de9e46ea5ae5c5f8a605f781910e62411046d76d2735880536bb80b4e226ee17",
+    "core/maxj.py": "2cdea25190fab14286c7940d680f3b6bb82ba12d47263bb6abf1545cb6d3632b",
+    "core/mgrid.py": "e60edf51c5f16c994f78b12224ece5e5a5b07980acd65c36f9532a1d06282e0d",
+    "core/monitoring.py": "68b19bac30545b032565fa11a80bc487577a84c65754395499028e6b1705471e",
+    "core/multigrid.py": "2b1484739c3f97599183008318ddb961179151205a867cdbf4b97d19e29c9f90",
+    "core/neoclassical.py": "9c9856d26ddc3047bc994386d291fe4bac1d62db90c11c633c2337f8b25feb77",
+    "core/nyquist.py": "fc6ae610f46134a9ffabeae0ca0c1d7ac05c3053d49b88d3e24af9213d4c63fb",
+    "core/omnigenity.py": "dacbdb9e0990adf7092043b8663e160d2d89e81ef0f18bd978e169c449aed2e2",
+    "core/optimize.py": "584a970963fdaf432bc72f4b81323f2d14f757cde91b13e1d432eab7ea70393a",
+    "core/parallel.py": "a09db5bbb9ea32df35304ba812eed6e93610a0d52d40360842ddbaeeaf13c1a3",
+    "core/plotting.py": "6b3174cc4418e8ecaa269536cfa0a7e75b0cf1c3ce68b4d9ce077a0d04681b9d",
+    "core/polish.py": "f2ce5e29a86f28d3b9775d4d0012fee173c9217d2a9d9111bca3141e1fefa0cc",
+    "core/polish_driver.py": "a68187e96de3a0b53a8143e2f440d557c314bc1ade0c2c98a5ccf31d572e6a18",
+    "core/polish_homotopy.py": "60c8b53910c6721d6c19d87377f82d0fdb6f3587f6edc8c87baf3f1953be4f6b",
+    "core/polish_implicit.py": "a14cac39a923c3ba9cc6a5f95a4f049551bf5e24e1004d46215001fb774c61d0",
+    "core/postprocess.py": "5a64aaec1caf1cc5bededea1ac4abd72cbe2d16a5b63bc33123c381135d6b69d",
+    "core/preconditioner.py": "57bc57853b1a22925ef8065ff9c340a16a88a2fd2018dd8168213702456e9b6d",
+    "core/preconditioner_2d.py": "926b2c3596ff8b958303379cd14707d351e090f945b79d9d3bf9cc3f4dbc3bb1",
+    "core/printing.py": "36b3556e73e340a0263f983e3600a7dd430c20d738b2f4fa987af47026081773",
+    "core/problem.py": "b8e4206a96513cac5f87177151092db5eadb6aa88e31aa6e2654892bbabc92f6",
+    "core/profiles.py": "7cbc5b1e62d73163e51e70ee3f43a402db1803608d51e2b5cd30bb93558688a5",
+    "core/qi.py": "a2c927f850e978b13305d4c56ded08fa942a94ff0ec8850b9ff1dd550d0969ff",
+    "core/radial_basis.py": "ef5129b5f28377626d645480b52d8e30624e477202d516da0fd31e52328c4b27",
+    "core/residuals.py": "53f8a1184a14bf0215785ae4f926ddb05811cb6ea6b713b3555f62cadf97dfb3",
+    "core/restart.py": "52cf59397dd92c05063b48ebd89a9b773a0c6de394614c2d7e6a9f7e264b8b50",
+    "core/run_options.py": "230d1391fbb6306604ebf3bb19aef92b13414eb3df11f1632879dbff8b6fe2a6",
+    "core/scaling.py": "17eaa422d985ff5264fb961daf04ac50e40fb3b4a2a09c0bb5b54d56ae0f2d6a",
+    "core/setup.py": "8e6f1183eef11f2400947b7bf64447523c4980999483437ed0b7d260c311448e",
+    "core/solver.py": "d4f79175f97e0d33231fa2ae092c1607b62d9e74db35008bb2b4e76c4f440a88",
+    "core/stability.py": "fceb196b0a5503be856f929c05bcce08ec0283bf18e927ba47eae7857b0a5ff2",
+    "core/statephysics.py": "adeedecd224737f22a5afacb3d41bcf56a65ed11939728afaf33fc45d3d55657",
+    "core/step.py": "06d643b8504db085af579d163a36a953d121e8cfc598359b3b4c0e9bd370dcd6",
+    "core/strong_force.py": "740e883b6b42b591dacb9b5906e42f613db7782b1f8658b81a3b2799e6f94dc6",
+    "core/tracing.py": "08d03fd98a3fe8eb9f7ad65a7ea371daeb66551b457d913e8ca3a3bab9d35b57",
+    "core/transforms.py": "2592e0fd0d797b6979b9c85940890a296a80de339b75abe544dfd8f8f174ffcf",
+    "core/turbulence.py": "2cfec7e8ceed7f5d0ddf1d45d5ca1e81a89494e06f56686303c8a23796a2da7c",
+    "core/vacuum.py": "d6748ac060c2959d9951e7057582ace180f79184d63efc92fb224efbcbfe7863",
+    "core/virtual_casing.py": "17ff310d959de61a0aa152868c15d7607af74221174b36f8ac61f92a22f81f89",
+    "core/wout.py": "6402b7830d1f112c4fbe7c3fd7a25ebb3aa801e6fdc0172854b8e27e8e747a79",
+    "doctor.py": "67a02d1690fa3f701726b4ebfa92e7bce23004f49f61b66c5b6f3a347da7489c",
+    "mirror/__init__.py": "da5d80e03da5e95c25b917168fd3570054244dbb2c1fb9a10b8463e5fdebed6d",
+    "mirror/analytic.py": "bfa59f063ac2feb01b9a3f5ce02a0f08c502031e08075431d193c20f201520e8",
+    "mirror/basis.py": "36c9a0902e051ae4ff54483ff05c6545542db82ae24c8c9d8dea0797a7a1d0c1",
+    "mirror/exterior.py": "dfe0a0c0cd6c3f565c5f53f912afd9033bd0d6a05fbeabba93f3729fb4863c16",
+    "mirror/forces.py": "cd0a66aef6b73c886aa8b1e17f7bab50a646a192d469fe3852859394bae863bc",
+    "mirror/free_boundary.py": "942ed2cc197bf07697631cf541b7c59da3d87d1e17e9d475cfd1eaa02dc9f48a",
+    "mirror/geometry.py": "b022c93ee58a94c88b2006b541657d32b1e465badf8053dcdb0d7fc36e98799f",
+    "mirror/implicit.py": "b53e0266e9772a180a7d752bb709fdc39a7c3b7723ab0b55f3617f7b2eaf5d69",
+    "mirror/metrics.py": "b42b000055c5f239a1723be16ab701df1a1038774621c7db8f83d3c5afda72c3",
+    "mirror/model.py": "f323986c40df592d717211bedddf73e19c508dc8103d507e33050f8d51c05c39",
+    "mirror/output.py": "f5ea7e7ef0a2e6d4495a5ff2524c2804b4c0d574730fb359da0ea1a71023f4d0",
+    "mirror/solver.py": "7b30873802dbfbb99253f85ce7fa724d27ab5b6aeeb6538165501edb59d613a4",
+    "mirror/splines.py": "779c89729aaaaf12026144f65579f12fadb6420bb527bb1b71cf3e4aa13d1c8a",
+    "mirror/turbulence.py": "5f4b8199a45f1d0b147315ece4b0ddf58bb10ad49b15d12710417d6951c1c7cc"
+  },
+  "radial_ladder": [
+    16,
+    24,
+    32,
+    48,
+    64
+  ],
+  "primal_converged": true,
+  "iterations": 650,
+  "force_residuals": [
+    5.672155256225417e-13,
+    2.8241956505971896e-13,
+    1.105194764860371e-15
+  ],
+  "edge_residual": 9.929966895543778e-13,
+  "elapsed_seconds": 386.50381710298825,
+  "volume_average_beta": 0.05482565888478282,
+  "exterior_error_estimate": 0.0,
+  "primal_pilot_passed": true,
+  "primal_evaluation_policy": "independent cold radial ladders per current; exact-control immutable accepted-root reuse for differentiation",
+  "implicit_status": 0,
+  "implicit_fsq": 8.50740285447121e-13,
+  "implicit_primal_state_max_difference": 0.0,
+  "wout_live_relative_difference": 3.9198576254804154e-16,
+  "base_field_relative_difference": 0.0,
+  "response_controls": [
+    "common_NCSX_current_factor"
+  ],
+  "finite_differences": [
+    {
+      "step": 0.001,
+      "relative_error": 0.001645902886185217,
+      "force_residuals": [
+        [
+          5.953274491614793e-13,
+          2.9634681150127687e-13,
+          1.112093783732611e-15,
+          9.986928257613096e-13
+        ],
+        [
+          5.616161612129763e-13,
+          2.7809046631302585e-13,
+          1.106059654585342e-15,
+          9.87652045039556e-13
+        ]
+      ]
+    },
+    {
+      "step": 0.0003,
+      "relative_error": 0.001774007371049459,
+      "force_residuals": [
+        [
+          5.716810775463443e-13,
+          2.858416081509333e-13,
+          1.107698406111614e-15,
+          9.971499423357352e-13
+        ],
+        [
+          5.666993544246924e-13,
+          2.823054722252218e-13,
+          1.1131951544221485e-15,
+          9.935755238824319e-13
+        ]
+      ]
+    },
+    {
+      "step": 0.0001,
+      "relative_error": 0.0017108487758009723,
+      "force_residuals": [
+        [
+          5.691238895114602e-13,
+          2.839292717883635e-13,
+          1.1061624508432611e-15,
+          9.952570581857943e-13
+        ],
+        [
+          5.662394701812756e-13,
+          2.8126139169043993e-13,
+          1.1063100788655967e-15,
+          9.938337954362315e-13
+        ]
+      ]
+    }
+  ],
+  "response_qualified": false
+}

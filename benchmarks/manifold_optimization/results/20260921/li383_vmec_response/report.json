@@ -1,0 +1,62 @@
+{
+  "case": "li383",
+  "response_method": "discrete",
+  "coordinate_convention": "fixed_vmec_flux_grid_labels",
+  "parameter_names": [
+    "rc(1,0)"
+  ],
+  "response_qualified": false,
+  "response_tolerance": 0.001,
+  "force_tolerance": 1e-18,
+  "finite_differences": [
+    {
+      "step": 0.001,
+      "relative_error": 0.048686827320065726,
+      "primal_converged": true,
+      "mean_field_strength_response": -7.128419712534618,
+      "mean_field_strength_finite_difference": -7.128966672813042,
+      "mean_field_strength_relative_error": 7.672364082016363e-05
+    },
+    {
+      "step": 0.0003,
+      "relative_error": 0.019582615875468994,
+      "primal_converged": true,
+      "mean_field_strength_response": -7.128419712534618,
+      "mean_field_strength_finite_difference": -7.128512566860387,
+      "mean_field_strength_relative_error": 1.3025764477212987e-05
+    },
+    {
+      "step": 0.0001,
+      "relative_error": 0.010454333277574161,
+      "primal_converged": true,
+      "mean_field_strength_response": -7.128419712534618,
+      "mean_field_strength_finite_difference": -7.12679525529003,
+      "mean_field_strength_relative_error": 0.00022793656705400714
+    },
+    {
+      "step": 3e-05,
+      "relative_error": 0.03880279587065616,
+      "primal_converged": true,
+      "mean_field_strength_response": -7.128419712534618,
+      "mean_field_strength_finite_difference": -7.121081399312038,
+      "mean_field_strength_relative_error": 0.0010305054543105084
+    },
+    {
+      "step": 1e-05,
+      "relative_error": 0.020356418380525685,
+      "primal_converged": true,
+      "mean_field_strength_response": -7.128419712534618,
+      "mean_field_strength_finite_difference": -7.12928859937234,
+      "mean_field_strength_relative_error": 0.00012187567183049828
+    }
+  ],
+  "transpose_error": 0.0,
+  "force_residuals": [
+    9.904172838126936e-19,
+    2.3368343267767283e-19,
+    9.814164134761016e-20
+  ],
+  "elapsed_seconds": 116.92237040802138,
+  "limitation": "fixed-boundary material-grid field response; no Eulerian/open-region or coil-response claim",
+  "slurm_job_id": "58705967"
+}

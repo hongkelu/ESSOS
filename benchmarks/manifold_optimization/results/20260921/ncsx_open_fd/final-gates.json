@@ -1,0 +1,21 @@
+{
+  "valid": true,
+  "accepted_candidates": [
+    {
+      "iteration": 0,
+      "cartesian_distance_upper_bound_m": 0.00011881515826238348,
+      "phase_error_upper_bound_rad": 6.422218041833826e-05
+    },
+    {
+      "iteration": 1,
+      "cartesian_distance_upper_bound_m": 0.00011885079183495396,
+      "phase_error_upper_bound_rad": 6.424144047150276e-05
+    }
+  ],
+  "launch_gate": {
+    "valid": true,
+    "native_wall_launch_distance_m": 0.11245798612546828,
+    "invariant_under_controls": "launch and wall are fixed; all optimized controls are coil currents"
+  },
+  "note": "Analytic conservative recheck of saved FD-candidate correspondence under the final Cartesian/phase criterion; fixed launch/wall satisfy the final interior-launch gate for all current controls."
+}

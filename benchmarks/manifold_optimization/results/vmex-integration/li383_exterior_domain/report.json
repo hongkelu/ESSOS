@@ -1,0 +1,120 @@
+{
+  "case": "LI383 exterior field domain refinement",
+  "equilibrium_run": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/vmex-20260922/li383-continuation-16-24-32",
+  "checkpoint_sha256": "4c8226ea3eec9d980540765d1cef36e1ae86e3afb65926de66ba74648962ddf4",
+  "radial_surfaces": 32,
+  "field_tolerance": 0.001,
+  "normalization": "local total field norm, floor 1e-12 T; backend estimate separately normalized by RMS surface field",
+  "derivative_policy": "User accepted measured 0.17\u20130.23 percent discrepancy for proceeding; original strict reports preserved",
+  "physical_design_qualified": false,
+  "section_chord_error_bound_m": 1.1120083391315888e-05,
+  "levels": [
+    {
+      "source_nphi": 48,
+      "source_ntheta": 48,
+      "quadrature": [
+        [
+          96,
+          48
+        ],
+        [
+          192,
+          96
+        ]
+      ],
+      "max_error_estimate": 625.0739881324564
+    },
+    {
+      "source_nphi": 96,
+      "source_ntheta": 96,
+      "quadrature": [
+        [
+          192,
+          96
+        ],
+        [
+          384,
+          192
+        ]
+      ],
+      "max_error_estimate": 38.24718200155421
+    },
+    {
+      "source_nphi": 144,
+      "source_ntheta": 144,
+      "quadrature": [
+        [
+          384,
+          192
+        ],
+        [
+          768,
+          384
+        ]
+      ],
+      "max_error_estimate": 2.0642250469246592
+    }
+  ],
+  "distances": [
+    {
+      "normal_offset_m": 0.005,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.00498883008946241,
+      "max_coarse_refined_relative_difference": 4.766445769020671,
+      "max_refined_finest_relative_difference": 1.1151473602541648,
+      "max_finest_error_estimate": 2.0642250469246592,
+      "sampled_ring_passed": false
+    },
+    {
+      "normal_offset_m": 0.01,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.009988780262316137,
+      "max_coarse_refined_relative_difference": 1.3967570892166143,
+      "max_refined_finest_relative_difference": 0.24895150257936272,
+      "max_finest_error_estimate": 0.05780435167996423,
+      "sampled_ring_passed": false
+    },
+    {
+      "normal_offset_m": 0.02,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.01998868060802337,
+      "max_coarse_refined_relative_difference": 0.2565417679342657,
+      "max_refined_finest_relative_difference": 0.020007130892569037,
+      "max_finest_error_estimate": 0.0004039205882052502,
+      "sampled_ring_passed": false
+    },
+    {
+      "normal_offset_m": 0.05,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.049988381645145054,
+      "max_coarse_refined_relative_difference": 0.008067130612118409,
+      "max_refined_finest_relative_difference": 6.646478613124668e-05,
+      "max_finest_error_estimate": 4.1382602937391384e-09,
+      "sampled_ring_passed": true
+    },
+    {
+      "normal_offset_m": 0.1,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.09998788337368121,
+      "max_coarse_refined_relative_difference": 0.00010793974426051384,
+      "max_refined_finest_relative_difference": 1.0936835008550314e-08,
+      "max_finest_error_estimate": 0.0,
+      "sampled_ring_passed": true
+    },
+    {
+      "normal_offset_m": 0.2,
+      "points": 72,
+      "minimum_section_clearance_lower_bound_m": 0.19998688683075327,
+      "max_coarse_refined_relative_difference": 4.4475289605476345e-08,
+      "max_refined_finest_relative_difference": 1.6961195289735718e-15,
+      "max_finest_error_estimate": 0.0,
+      "sampled_ring_passed": true
+    }
+  ],
+  "elapsed_seconds": 113.79113098897506,
+  "passing_sampled_offsets_m": [
+    0.05,
+    0.1,
+    0.2
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "job": "58712906",
+  "cause": "interactive shell auto-logout after 30 minutes",
+  "interrupted_steps": [
+    "compatibility QA lane",
+    "installed-wheel tests"
+  ],
+  "replacement_job": "58716831",
+  "completed_physics_preserved": true
+}

@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "repositories": {
+    "essos": {
+      "url": "https://github.com/hongkelu/ESSOS",
+      "commit": "3c1dc4ffe0b255eb05389d91803db8591255026b"
+    },
+    "pyna": {
+      "url": "https://github.com/WenyinWei/pyna",
+      "commit": "4f032d7128cbc5edd62350b42c1015587c0d684c"
+    }
+  },
+  "inputs": [
+    "examples/input_files/ESSOS_biot_savart_LandremanPaulQA.json"
+  ],
+  "lanes": {
+    "analytic": {
+      "pyna": [
+        "tests/test_jax_poincare.py",
+        "tests/test_jax_periodic.py",
+        "tests/test_jax_manifold.py",
+        "tests/test_jax_strike.py",
+        "tests/test_torus_deformation.py",
+        "tests/test_manifold_correspondence.py",
+        "tests/test_manifold_strike_correspondence.py",
+        "tests/test_manifold_contracts.py",
+        "tests/test_torus_solver.py",
+        "tests/test_clearance3d.py",
+        "tests/test_open_lines.py",
+        "tests/test_manifold_physics_conventions.py",
+        "tests/test_circle_validation.py"
+      ],
+      "essos": [
+        "tests/test_periodic_xline_loss.py",
+        "tests/test_return_map_surface_loss.py",
+        "tests/test_manifold_branch_loss.py",
+        "tests/test_manifold_optimization.py",
+        "tests/test_manifold_strike_optimization.py",
+        "tests/test_manifold_heat_optimization.py",
+        "tests/test_manifold_leg_optimization.py",
+        "tests/test_topology_optimizer.py",
+        "tests/test_surface_optimization.py",
+        "tests/test_equilibrium_response.py",
+        "tests/test_candidate_cache.py",
+        "tests/test_coil_inputs.py",
+        "tests/test_coils.py",
+        "tests/test_open_bundle_optimization.py",
+        "tests/test_manifold_baseline_runner.py",
+        "tests/test_equilibrium_surface_optimization.py"
+      ]
+    },
+    "production": {
+      "pyna": [
+        "tests/test_jax_poincare_cyna.py",
+        "tests/test_jax_manifold_cyna.py",
+        "tests/test_manifold_correspondence_cyna.py",
+        "tests/test_manifold_refresh_cyna.py",
+        "tests/test_manifold_leg_clearance.py",
+        "tests/test_open_validation.py",
+        "tests/test_toroidal_wall_interpolation_cyna.py"
+      ],
+      "essos": [
+        "tests/test_manifold_adapter.py",
+        "tests/test_manifold_validation.py",
+        "tests/test_manifold_strike_validation.py",
+        "tests/test_open_bundle_optimization_cyna.py"
+      ]
+    },
+    "qa": {
+      "essos": [
+        "tests/test_qa_manifold_coils.py::test_qa_period_five_xline_has_differentiable_multi_turn_strike"
+      ]
+    },
+    "tokamak": {
+      "essos": [
+        "tests/test_manifold_coils.py::test_coil_current_moves_a_hyperbolic_xline_and_its_manifold",
+        "tests/test_manifold_coils.py::test_tokamak_pf_coil_candidate_passes_full_outer_validation",
+        "tests/test_manifold_coils.py::test_tokamak_stable_leg_clearance_and_rejected_margin",
+        "tests/test_manifold_coils.py::test_bounded_pf_current_step_reaches_a_first_wall_strike",
+        "tests/test_manifold_coils.py::test_bounded_pf_coil_height_step_reaches_a_first_wall_strike"
+      ]
+    }
+  },
+  "expected_counts": {
+    "pyna/tests/test_jax_poincare.py": 6,
+    "pyna/tests/test_jax_periodic.py": 9,
+    "pyna/tests/test_jax_manifold.py": 7,
+    "pyna/tests/test_jax_strike.py": 13,
+    "pyna/tests/test_torus_deformation.py": 25,
+    "pyna/tests/test_manifold_correspondence.py": 5,
+    "pyna/tests/test_manifold_strike_correspondence.py": 7,
+    "essos/tests/test_periodic_xline_loss.py": 6,
+    "essos/tests/test_return_map_surface_loss.py": 5,
+    "essos/tests/test_manifold_branch_loss.py": 5,
+    "essos/tests/test_manifold_optimization.py": 8,
+    "essos/tests/test_manifold_strike_optimization.py": 5,
+    "essos/tests/test_manifold_heat_optimization.py": 9,
+    "essos/tests/test_manifold_leg_optimization.py": 9,
+    "pyna/tests/test_jax_poincare_cyna.py": 2,
+    "pyna/tests/test_jax_manifold_cyna.py": 2,
+    "pyna/tests/test_manifold_correspondence_cyna.py": 4,
+    "pyna/tests/test_manifold_refresh_cyna.py": 4,
+    "pyna/tests/test_manifold_leg_clearance.py": 12,
+    "essos/tests/test_manifold_adapter.py": 9,
+    "essos/tests/test_manifold_validation.py": 9,
+    "essos/tests/test_manifold_strike_validation.py": 3,
+    "essos/tests/test_qa_manifold_coils.py::test_qa_period_five_xline_has_differentiable_multi_turn_strike": 1,
+    "essos/tests/test_manifold_coils.py::test_coil_current_moves_a_hyperbolic_xline_and_its_manifold": 1,
+    "essos/tests/test_manifold_coils.py::test_tokamak_pf_coil_candidate_passes_full_outer_validation": 1,
+    "essos/tests/test_manifold_coils.py::test_tokamak_stable_leg_clearance_and_rejected_margin": 1,
+    "pyna/tests/test_manifold_contracts.py": 11,
+    "pyna/tests/test_torus_solver.py": 4,
+    "pyna/tests/test_clearance3d.py": 4,
+    "pyna/tests/test_open_lines.py": 1,
+    "pyna/tests/test_manifold_physics_conventions.py": 2,
+    "essos/tests/test_topology_optimizer.py": 6,
+    "essos/tests/test_surface_optimization.py": 1,
+    "essos/tests/test_equilibrium_response.py": 2,
+    "essos/tests/test_candidate_cache.py": 2,
+    "essos/tests/test_coil_inputs.py": 1,
+    "essos/tests/test_coils.py": 27,
+    "essos/tests/test_open_bundle_optimization.py": 1,
+    "essos/tests/test_manifold_baseline_runner.py": 23,
+    "pyna/tests/test_open_validation.py": 1,
+    "pyna/tests/test_circle_validation.py": 1,
+    "essos/tests/test_equilibrium_surface_optimization.py": 1,
+    "essos/tests/test_open_bundle_optimization_cyna.py": 1,
+    "essos/tests/test_manifold_coils.py::test_bounded_pf_current_step_reaches_a_first_wall_strike": 1,
+    "essos/tests/test_manifold_coils.py::test_bounded_pf_coil_height_step_reaches_a_first_wall_strike": 1,
+    "pyna/tests/test_toroidal_wall_interpolation_cyna.py": 3
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "case": "NCSX vacuum general-open first-hit control",
+  "method": "implicit",
+  "status": "numerical_floor_reached",
+  "field_mode": "vacuum_coils",
+  "launch_RZ_m": [
+    1.7,
+    0.65
+  ],
+  "target_RZ_m": [
+    1.6273179516870275,
+    0.5988745268006168
+  ],
+  "parameters": [
+    1.0009998881540254,
+    0.9989994616901674,
+    1.0000006501558072
+  ],
+  "initial_objective": 0.0026648120350959642,
+  "final_objective": 3.1938348197887805e-11,
+  "trials": [
+    {
+      "accepted": true,
+      "actual_decrease": 0.00245987054546922,
+      "diagnostics": {
+        "hit_discrepancy_m": 8.853499423147447e-05,
+        "unwrapped_phase_discrepancy_rad": 4.7471215317840265e-05
+      },
+      "iteration": 0,
+      "predicted_decrease": 0.0024601173378961537,
+      "q": [
+        0.1550411373533139,
+        -0.12192422051007602,
+        -0.03311691684323789
+      ],
+      "radius": 0.2,
+      "ratio": 0.9998996826601999,
+      "status": "accepted"
+    },
+    {
+      "accepted": true,
+      "actual_decrease": 0.00020494145768839593,
+      "diagnostics": {
+        "hit_discrepancy_m": 8.856233704004209e-05,
+        "unwrapped_phase_discrepancy_rad": 4.748565177958852e-05
+      },
+      "iteration": 1,
+      "predicted_decrease": 0.00020494148962674414,
+      "q": [
+        0.19997763080506928,
+        -0.20010766196652668,
+        0.0001300311614573918
+      ],
+      "radius": 0.4,
+      "ratio": 0.9999998441586998,
+      "status": "accepted"
+    }
+  ],
+  "validations": [
+    {
+      "valid": true,
+      "status": "certified",
+      "speed_bound": 3.8967667137039195,
+      "minimum_clearance_lower_bound": 0.02049524706168287
+    },
+    {
+      "valid": true,
+      "status": "certified",
+      "speed_bound": 3.8967667137039195,
+      "minimum_clearance_lower_bound": 0.02049524706168287
+    },
+    {
+      "valid": true,
+      "status": "certified",
+      "speed_bound": 3.8972342658434957,
+      "minimum_clearance_lower_bound": 0.02047927675420417
+    },
+    {
+      "valid": true,
+      "status": "certified",
+      "speed_bound": 3.897287372044671,
+      "minimum_clearance_lower_bound": 0.02047294238513799
+    },
+    {
+      "valid": true,
+      "status": "certified",
+      "speed_bound": 3.7144893745921177,
+      "minimum_clearance_lower_bound": 0.022602305505392335
+    }
+  ],
+  "derivative_checks": [
+    {
+      "step": 0.001,
+      "relative_error": 0.000657382040831469
+    },
+    {
+      "step": 0.0003,
+      "relative_error": 0.0006561656210090606
+    },
+    {
+      "step": 0.0001,
+      "relative_error": 0.0006545151493104164
+    }
+  ],
+  "refined_valid": true,
+  "refined_target_error_m": 7.59305273029072e-09,
+  "mesh": {
+    "merged_vertices": 18000,
+    "faces": 36000,
+    "original_vertices": 6100,
+    "seam_merge_tolerance_m": 3e-06,
+    "field_period_rad": 2.0943951023931953
+  },
+  "elapsed_seconds": 231.05657605803572,
+  "current_bounds": [
+    0.995,
+    1.005
+  ],
+  "sum_current_factors": 3.0,
+  "bounds_kind": "numerical recovery benchmark",
+  "required_clearance_m": 0.001,
+  "terminal_exclusion_m": 0.2,
+  "wall_error_budget_m": 0.003492576684696418,
+  "trace_error_budget_m": 1e-05,
+  "limitation": "Numerical recovery test; independent tracing/wall error budgets and engineering limits need further qualification"
+}

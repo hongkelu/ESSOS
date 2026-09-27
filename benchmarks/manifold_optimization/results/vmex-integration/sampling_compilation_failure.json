@@ -1,0 +1,70 @@
+{
+  "case": "LI383 finite-beta exterior native trace",
+  "checkpoint_sha256": "4c8226ea3eec9d980540765d1cef36e1ae86e3afb65926de66ba74648962ddf4",
+  "equilibrium_run": "/pscratch/sd/h/hongkelu/manifold-optimization/run_artifacts/vmex-20260922/li383-continuation-16-24-32",
+  "seed_RZ_m": [
+    1.4599201997551554,
+    0.9512675314939156
+  ],
+  "phi_interval": [
+    0.1,
+    0.125
+  ],
+  "exterior_Z_lower_bound_m": 0.8312675314939156,
+  "trace_tolerance_m": 0.0001,
+  "step_tolerance_m": 1e-06,
+  "response_policy": "User accepts recorded 0.17\u20130.23 percent common-current discrepancy for proceeding",
+  "physical_design_qualified": false,
+  "rows": [
+    {
+      "grid": [
+        5,
+        5,
+        32
+      ],
+      "steps": 32,
+      "maximum_trace_error_m": 0.00015686417319076468,
+      "maximum_grid_error_estimate": 0.0
+    },
+    {
+      "grid": [
+        5,
+        5,
+        32
+      ],
+      "steps": 64,
+      "maximum_trace_error_m": 0.00015686338611047002,
+      "maximum_grid_error_estimate": 0.0,
+      "endpoint_step_difference_m": 8.19558446203927e-10,
+      "endpoint_grid_difference_m": null
+    },
+    {
+      "grid": [
+        9,
+        9,
+        64
+      ],
+      "steps": 32,
+      "maximum_trace_error_m": 4.902536913164081e-05,
+      "maximum_grid_error_estimate": 0.0
+    },
+    {
+      "grid": [
+        9,
+        9,
+        64
+      ],
+      "steps": 64,
+      "maximum_trace_error_m": 4.9025661157356964e-05,
+      "maximum_grid_error_estimate": 0.0,
+      "endpoint_step_difference_m": 3.1009524017396734e-10,
+      "endpoint_grid_difference_m": 0.00010783779250445688
+    }
+  ],
+  "trajectory_field_refinement_relative_difference": 2.691519277040808e-16,
+  "trajectory_maximum_error_estimate": 0.0,
+  "minimum_sampled_section_clearance_m": 0.371741983664353,
+  "elapsed_seconds": 379.76013250497635,
+  "native_trace_passed": false,
+  "error": "JaxRuntimeError: INTERNAL: Failed to materialize symbols: { (<xla_jit_dylib_13>, { broadcast_multiply_fusion.2 }) }"
+}

@@ -1,0 +1,278 @@
+{
+  "case": "LI383 finite-beta exterior endpoint recovery",
+  "method": "re_solved_finite_difference",
+  "field_mode": "self_consistent_equilibrium",
+  "response_policy": "User accepted existing approximate implicit field response; this baseline uses independent re-solves.",
+  "controls": [
+    "common_NCSX_current_factor"
+  ],
+  "bounds": [
+    0.999,
+    1.001
+  ],
+  "bounds_kind": "numerical",
+  "target_current_factor": 1.0003,
+  "launch_RZ_m": [
+    1.4599201997551554,
+    0.9512675314939156
+  ],
+  "phi_interval": [
+    0.1,
+    0.125
+  ],
+  "residual_scale_m": 1e-05,
+  "qualified_trace_sha256": "06564192d6ba156bacc7b37ef8126f010504717522df655559016010e825f74b",
+  "physical_design_qualified": false,
+  "evaluations": [
+    {
+      "current_factor": 1.0003,
+      "refined": false,
+      "purpose": "independent numerical target",
+      "endpoint_RZ_m": [
+        1.4482352295948269,
+        0.9340432256799711
+      ],
+      "beta": 0.05479422204129282,
+      "maximum_force_residual": 9.855998008896833e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10286499266722815,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482348077082998,
+        0.9340428109386217
+      ],
+      "beta": 0.05482936457628587,
+      "maximum_force_residual": 9.951581853824965e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.1027752794447061,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482348077082998,
+        0.9340428109386217
+      ],
+      "beta": 0.05482936457628587,
+      "maximum_force_residual": 9.951581853824965e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.1027752794447061,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482348077082998,
+        0.9340428109386217
+      ],
+      "beta": 0.05482936457628587,
+      "maximum_force_residual": 9.951581853824965e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.1027752794447061,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0001,
+      "refined": false,
+      "purpose": "finite-difference plus",
+      "endpoint_RZ_m": [
+        1.4482349487205717,
+        0.934042949869346
+      ],
+      "beta": 0.05481764673249941,
+      "maximum_force_residual": 9.96323464492263e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10280511785193158,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 0.9999,
+      "refined": false,
+      "purpose": "finite-difference minus",
+      "endpoint_RZ_m": [
+        1.4482346666182777,
+        0.9340426718489122
+      ],
+      "beta": 0.05484108632013505,
+      "maximum_force_residual": 9.947563016591963e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10274544737168179,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0002987329290542,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482352278143777,
+        0.9340432239346901
+      ],
+      "beta": 0.054794370398307785,
+      "maximum_force_residual": 9.855913931573853e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10286461302452565,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0002987329290542,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482352278143777,
+        0.9340432239346901
+      ],
+      "beta": 0.054794370398307785,
+      "maximum_force_residual": 9.855913931573853e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10286461302452565,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0003987329290542,
+      "refined": false,
+      "purpose": "finite-difference plus",
+      "endpoint_RZ_m": [
+        1.448235360596182,
+        0.9340433461095191
+      ],
+      "beta": 0.05478265941807835,
+      "maximum_force_residual": 9.893741453373792e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10289601302807527,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0001987329290543,
+      "refined": false,
+      "purpose": "finite-difference minus",
+      "endpoint_RZ_m": [
+        1.4482350876013086,
+        0.9340430861312085
+      ],
+      "beta": 0.054806080793368864,
+      "maximum_force_residual": 9.988412668635647e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.1028346561587915,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0003000555047237,
+      "refined": false,
+      "purpose": "candidate refresh",
+      "endpoint_RZ_m": [
+        1.4482352296728176,
+        0.9340432257564107
+      ],
+      "beta": 0.05479421554245415,
+      "maximum_force_residual": 9.855994294018592e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10286500929674547,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0003000555047237,
+      "refined": true,
+      "purpose": "independent final grid refinement",
+      "endpoint_RZ_m": [
+        1.4482018457068453,
+        0.9340250499824624
+      ],
+      "beta": 0.05479421554245415,
+      "maximum_force_residual": 9.855994294018592e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10284683352279711,
+      "equilibrium_and_trace_valid": true
+    },
+    {
+      "current_factor": 1.0003,
+      "refined": true,
+      "purpose": "independent target grid refinement",
+      "endpoint_RZ_m": [
+        1.4482018456286971,
+        0.9340250499058717
+      ],
+      "beta": 0.05479422204129282,
+      "maximum_force_residual": 9.855998008896833e-13,
+      "maximum_field_error_estimate": 0.0,
+      "minimum_Z_clearance_bound_m": 0.10284681689312869,
+      "equilibrium_and_trace_valid": true
+    }
+  ],
+  "elapsed_seconds": 351.93584251601715,
+  "target_RZ_m": [
+    1.4482352295948269,
+    0.9340432256799711
+  ],
+  "status": "numerical_floor_reached",
+  "final_current_factor": 1.0003000555047237,
+  "initial_objective": 0.0017499931429241114,
+  "final_objective": 5.962785293018187e-11,
+  "accepted_iterations": 2,
+  "trials": [
+    {
+      "accepted": true,
+      "actual_decrease": 0.0017499620628993581,
+      "diagnostics": {
+        "beta": 0.054794370398307785,
+        "current_factor": 1.0002987329290542,
+        "endpoint_RZ_m": [
+          1.4482352278143777,
+          0.9340432239346901
+        ],
+        "equilibrium_and_trace_valid": true,
+        "maximum_field_error_estimate": 0.0,
+        "maximum_force_residual": 9.855913931573853e-13,
+        "minimum_Z_clearance_bound_m": 0.10286461302452565,
+        "purpose": "candidate refresh",
+        "refined": false
+      },
+      "iteration": 0,
+      "predicted_decrease": 0.0017499903957215422,
+      "q": [
+        0.29873292905421833
+      ],
+      "radius": 0.5,
+      "ratio": 0.99998380972704,
+      "status": "accepted"
+    },
+    {
+      "accepted": true,
+      "actual_decrease": 3.102039690024563e-08,
+      "diagnostics": {
+        "beta": 0.05479421554245415,
+        "current_factor": 1.0003000555047237,
+        "endpoint_RZ_m": [
+          1.4482352296728176,
+          0.9340432257564107
+        ],
+        "equilibrium_and_trace_valid": true,
+        "maximum_field_error_estimate": 0.0,
+        "maximum_force_residual": 9.855994294018592e-13,
+        "minimum_Z_clearance_bound_m": 0.10286500929674547,
+        "purpose": "candidate refresh",
+        "refined": false
+      },
+      "iteration": 1,
+      "predicted_decrease": 3.107354160972535e-08,
+      "q": [
+        0.30005550472367576
+      ],
+      "radius": 0.5,
+      "ratio": 0.998289711866539,
+      "status": "accepted"
+    }
+  ],
+  "refined_recovery_error_m": 1.0942245915148974e-10,
+  "refined_valid": true,
+  "numerical_recovery_passed": true,
+  "limitation": "Known-control recovery on a short exterior trajectory. It is not a wall-target design, physical position accuracy, or a qualification of implicit trace gradients."
+}

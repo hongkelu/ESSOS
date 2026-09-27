@@ -1,0 +1,71 @@
+name: Required manifold baseline
+
+on:
+  push:
+    branches: [manifold-optimization]
+  pull_request:
+    branches: [main, manifold-optimization]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [analytic, production, qa, tokamak]
+    env:
+      CYNA_WITH_CUDA: '0'
+      CYNA_SKIP_TOOL_INSTALL: '1'
+      JAX_PLATFORMS: cpu
+      JAX_ENABLE_X64: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: essos
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve pinned pyna revision
+        id: compatibility
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          config = json.loads(Path('essos/benchmarks/manifold_optimization/baseline.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('pyna_commit=' + config['repositories']['pyna']['commit'] + '\n')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          repository: WenyinWei/pyna
+          ref: ${{ steps.compatibility.outputs.pyna_commit }}
+          path: pyna
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: '3.0.1'
+      - name: Install locked CPU environment and source pair
+        run: |
+          python -m pip install -r essos/benchmarks/manifold_optimization/requirements-cpu-py312.txt
+          python -m pip install --no-build-isolation --no-deps -e ./pyna -e ./essos
+          python -m pip check
+      - name: Verify required-lane failure handling
+        run: python -m pytest essos/tests/test_manifold_baseline_runner.py -q
+      - name: Run required regression lane
+        run: |
+          python essos/scripts/run_manifold_baseline.py \
+            --pyna-root pyna --lane ${{ matrix.lane }} \
+            --output run_artifacts/${{ matrix.lane }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: manifold-${{ matrix.lane }}
+          path: run_artifacts/
+          if-no-files-found: error

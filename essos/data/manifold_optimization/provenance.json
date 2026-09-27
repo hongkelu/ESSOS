@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "inputs": [
+    {
+      "file": "li383.vmec",
+      "source": "/pscratch/sd/h/hongkelu/vmec_jax/examples/data/input.li383_low_res",
+      "sha256": "adcea5bf869c41127048e4fd32edcbdbd38865a8e81985e8d0bb671c6db9e6e4",
+      "description": "LI383 fixed-boundary pressure/current equilibrium"
+    },
+    {
+      "file": "tokamak.vmec",
+      "source": "/pscratch/sd/h/hongkelu/vmec_jax/examples/data/input.ITERModel",
+      "sha256": "81d0202817bd42ced23e709e1a9391387918e05541f72e55ae79d2f94132fbeb",
+      "description": "ITER-model axisymmetric equilibrium"
+    },
+    {
+      "file": "ncsx_coils.json",
+      "source": "/pscratch/sd/h/hongkelu/simsopt/examples/2_Intermediate/inputs/input_ncsx/ncsx_init.json",
+      "sha256": "e4d3dbd85d2719f2cea86af4e2bab98056ef21579acb9f44d33855db97687c09",
+      "description": "NCSX modular coils; association with LI383 equilibrium not yet qualified"
+    },
+    {
+      "file": "ncsx_wall.dat",
+      "source": "/pscratch/sd/h/hongkelu/STELLOPT/BENCHMARKS/FIELDLINES_TEST/NCSX_wall_trimesh.dat",
+      "sha256": "bf95943bce7f0d98d59188d8fca9a37351820a1e84b390fa9524e60350e21022",
+      "description": "NCSX vessel; association with selected coil case not yet qualified"
+    }
+  ],
+  "engineering_limits": null,
+  "qualification": "pending",
+  "solver_candidate": "vmec_jax",
+  "solver_revision": "807255b2d29c2c733234004024faa6bcad9df8c1"
+}

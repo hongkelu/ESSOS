@@ -1,0 +1,29 @@
+{
+  "valid": true,
+  "modules": {
+    "essos": "/tmp/manifold-validated-install-58705967/essos/__init__.py",
+    "essos.open_bundle_optimization": "/tmp/manifold-validated-install-58705967/essos/open_bundle_optimization.py",
+    "essos.vmec_response": "/tmp/manifold-validated-install-58705967/essos/vmec_response.py",
+    "essos.surface_optimization": "/tmp/manifold-validated-install-58705967/essos/surface_optimization.py",
+    "essos.equilibrium_surface_optimization": "/tmp/manifold-validated-install-58705967/essos/equilibrium_surface_optimization.py",
+    "essos.coil_inputs": "/tmp/manifold-validated-install-58705967/essos/coil_inputs.py",
+    "pyna": "/tmp/manifold-validated-install-58705967/pyna/__init__.py",
+    "pyna.topo.torus_solver": "/tmp/manifold-validated-install-58705967/pyna/topo/torus_solver.py",
+    "pyna.topo.circle_validation": "/tmp/manifold-validated-install-58705967/pyna/topo/circle_validation.py",
+    "pyna.topo.open_validation": "/tmp/manifold-validated-install-58705967/pyna/topo/open_validation.py",
+    "pyna._cyna": "/tmp/manifold-validated-install-58705967/pyna/_cyna/__init__.py"
+  },
+  "native_extension": "/tmp/manifold-validated-install-58705967/pyna/_cyna/_cyna_ext.so",
+  "native_sha256": "377e681fd8f1484a24a2bad815ce60173047ea2835f1421c7abda3e771ce1c6c",
+  "resources": {
+    "tokamak.vmec": "81d0202817bd42ced23e709e1a9391387918e05541f72e55ae79d2f94132fbeb",
+    "li383.vmec": "adcea5bf869c41127048e4fd32edcbdbd38865a8e81985e8d0bb671c6db9e6e4",
+    "ncsx_coils.json": "e4d3dbd85d2719f2cea86af4e2bab98056ef21579acb9f44d33855db97687c09",
+    "ncsx_wall.dat": "bf95943bce7f0d98d59188d8fca9a37351820a1e84b390fa9524e60350e21022",
+    "provenance.json": "70e567265d566afabdf09c08494a430016ec68429498a01cfdb3b244e7105db6"
+  },
+  "jax_version": "0.6.2",
+  "x64": true,
+  "circle_response": true,
+  "native_trace": true
+}

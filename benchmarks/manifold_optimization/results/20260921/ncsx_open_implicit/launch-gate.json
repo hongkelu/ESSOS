@@ -1,0 +1,5 @@
+{
+  "valid": true,
+  "native_wall_launch_distance_m": 0.11245798612546828,
+  "invariant_under_controls": "launch and wall are fixed; all optimized controls are coil currents"
+}

@@ -1,0 +1,71 @@
+{
+  "case": "NCSX modular-coil vacuum surface control",
+  "method": "direct",
+  "status": "direct_surface_converged",
+  "input_sha256": "e4d3dbd85d2719f2cea86af4e2bab98056ef21579acb9f44d33855db97687c09",
+  "field_mode": "vacuum_coils",
+  "label": "signed_section_area",
+  "area": 0.0028274333882308137,
+  "initial_objective": 0.49999995810322684,
+  "final_objective": 6.71148067020064e-26,
+  "target_iota": 0.40181466005886707,
+  "final_iota": 0.4018146265171165,
+  "refined_valid": true,
+  "refined_status": "valid",
+  "refined_invariance_residual": 1.377826523304191e-11,
+  "parameters": [
+    1.0123868917772334,
+    1.0116364976164494,
+    0.9759766106063175
+  ],
+  "nesting_valid": true,
+  "nesting_status": "valid",
+  "neighbor_section_areas": [
+    0.00254469004929463,
+    0.0028274333882307686,
+    0.003110176727038011
+  ],
+  "minimum_section_separation_m": 0.0005053770459583311,
+  "current_bounds": [
+    0.95,
+    1.05
+  ],
+  "sum_current_factors": 3.0,
+  "bounds_kind": "numerical benchmark bounds",
+  "derivative_checks": [
+    {
+      "step": 0.001,
+      "implicit": 9.251945951022073,
+      "finite_difference": 9.251946148480794,
+      "absolute_error": 1.9745872137377773e-07,
+      "valid": true
+    },
+    {
+      "step": 0.0003,
+      "implicit": 9.251945951022073,
+      "finite_difference": 9.251945865651479,
+      "absolute_error": 8.53705941494809e-08,
+      "valid": true
+    },
+    {
+      "step": 0.0001,
+      "implicit": 9.251945951022073,
+      "finite_difference": 9.251945942923001,
+      "absolute_error": 8.099071635569999e-09,
+      "valid": true
+    }
+  ],
+  "trials": [],
+  "calls": {
+    "model": 0,
+    "refresh": 1,
+    "optimization_corrector_solves": 1,
+    "direct_residual_calls": 8
+  },
+  "optimization_seconds": 11.39716077700723,
+  "diagnostic_corrector_solves": 8,
+  "refinement_corrector_solves": 3,
+  "compilation_policy": "cold process; diagnostic solves compile shared kernels before the optimization timer; total includes setup, diagnostics, optimization and refinement",
+  "elapsed_seconds": 223.16072965902276,
+  "slurm_job_id": "58705967"
+}

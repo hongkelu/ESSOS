@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "baseline_unique_tests": 262,
+  "manifests": {
+    "compatibility": "8b394f65f40cb578d7164f433db595643b25725b4d16bf093a54dec680863dea",
+    "compatibility-qa": "a6143df0988710880ec2fe5e5d134895dddc95ccee69ecf83f7bcf2302552b03",
+    "compatibility-tokamak": "1377a006ee71d20ebf5cad89b71409cee973fa79ad3dff42b504cde4f9922299"
+  },
+  "allocation_interruption": "Original shell auto-logout interrupted QA; analytic/production completed. QA and tokamak were run to completion in replacement allocation 58716831.",
+  "packages": {
+    "jax": "0.9.2",
+    "scipy": "1.16.3"
+  },
+  "new_vmex_tests": 4,
+  "note": "VMEX required lane and installed-wheel results are recorded separately; three native tests overlap the baseline inventory.",
+  "required_vmex_suite_tests": 7,
+  "additional_unique_vmex_tests": 4,
+  "total_unique_tests": 266,
+  "installed_wheel_tests": 4,
+  "installed_wheels": "passed",
+  "verified_runtime_source_files": 296,
+  "adapter_sha256": "468f3fdcb438f044764a909231cc2c40a8214c24bb6825a8efba8ffb35cdf473"
+}
