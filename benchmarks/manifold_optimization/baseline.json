@@ -7,7 +7,7 @@
     },
     "pyna": {
       "url": "https://github.com/WenyinWei/pyna",
-      "commit": "4f032d7128cbc5edd62350b42c1015587c0d684c"
+      "commit": "e5810d5b7980775b5aa3217d0d03038bcc73aada"
     }
   },
   "inputs": [
@@ -46,7 +46,8 @@
         "tests/test_coils.py",
         "tests/test_open_bundle_optimization.py",
         "tests/test_manifold_baseline_runner.py",
-        "tests/test_equilibrium_surface_optimization.py"
+        "tests/test_equilibrium_surface_optimization.py",
+        "tests/test_connection_length.py"
       ]
     },
     "production": {
@@ -63,7 +64,8 @@
         "tests/test_manifold_adapter.py",
         "tests/test_manifold_validation.py",
         "tests/test_manifold_strike_validation.py",
-        "tests/test_open_bundle_optimization_cyna.py"
+        "tests/test_open_bundle_optimization_cyna.py",
+        "tests/test_connection_length_cyna.py"
       ]
     },
     "qa": {
@@ -127,6 +129,8 @@
     "essos/tests/test_open_bundle_optimization_cyna.py": 1,
     "essos/tests/test_manifold_coils.py::test_bounded_pf_current_step_reaches_a_first_wall_strike": 1,
     "essos/tests/test_manifold_coils.py::test_bounded_pf_coil_height_step_reaches_a_first_wall_strike": 1,
-    "pyna/tests/test_toroidal_wall_interpolation_cyna.py": 3
+    "pyna/tests/test_toroidal_wall_interpolation_cyna.py": 3,
+    "essos/tests/test_connection_length.py": 9,
+    "essos/tests/test_connection_length_cyna.py": 1
   }
 }

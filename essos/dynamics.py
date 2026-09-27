@@ -1742,7 +1742,7 @@ def trace_field_lines(
 
 
 def connection_length(field, initial_conditions, wall, *, max_length,
-                      tolerance=1.0e-8, max_steps=100000):
+                      tolerance=1.0e-8, max_steps=100000, adjoint=None):
     """Connection length and wall strike points of field lines.
 
     Each seed is followed along ``+B`` and ``-B`` by physical arclength until
@@ -1761,6 +1761,10 @@ def connection_length(field, initial_conditions, wall, *, max_length,
         tolerance: Relative and absolute integration and root-finding tolerance.
         max_steps: Maximum adaptive steps per direction; a line that exhausts
             them returns ``nan`` length and ``hit`` false.
+        adjoint: Diffrax adjoint used to differentiate the solve. The default,
+            ``diffrax.RecursiveCheckpointAdjoint()``, supports reverse mode
+            (``jax.grad``, ``jax.jacrev``); pass ``diffrax.ForwardMode()`` for
+            ``jax.jvp`` and ``jax.jacfwd``.
 
     Returns:
         Dict with ``lengths`` ``(n, 2)`` (forward, backward), ``connection_length``
@@ -1783,7 +1787,8 @@ def connection_length(field, initial_conditions, wall, *, max_length,
             ODETerm(vector_field), diffrax.Dopri8(), t0=0.0, t1=float(max_length),
             dt0=float(max_length) / 1000, y0=seed, args=sign,
             saveat=SaveAt(t1=True), stepsize_controller=controller,
-            event=event, max_steps=int(max_steps), throw=False)
+            event=event, max_steps=int(max_steps), throw=False,
+            adjoint=diffrax.RecursiveCheckpointAdjoint() if adjoint is None else adjoint)
         hit = solution.event_mask
         failed = (solution.result != diffrax.RESULTS.successful) & ~hit
         outside = distance(seed) <= 0.0

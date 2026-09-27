@@ -577,3 +577,60 @@ tree_util.register_pytree_node(CombinedField,
                                CombinedField._tree_flatten,
                                CombinedField._tree_unflatten)
 
+
+
+class CircularTokamakField(MagneticField):
+    """Axisymmetric field with exactly circular flux surfaces, in Cartesian coordinates.
+
+    ``B = grad(psi) x grad(phi) + F grad(phi)`` with ``psi = B_poloidal r^2 / 2``,
+    ``r`` the minor radius about ``(major_radius, 0)`` and ``F = B_toroidal *
+    major_radius``. The field is divergence free by construction, every field line
+    stays on its circle ``r = const``, and the arclength per radian of poloidal angle
+    ``theta = atan2(Z, R - major_radius)`` is constant along a line:
+    ``dl/dtheta = sqrt(F^2 + (B_poloidal r)^2) / B_poloidal``. Connection lengths to
+    simple walls are therefore known in closed form, which makes this field a
+    reference for field-line tracing and its derivatives.
+
+    Args:
+        major_radius: Radius ``R0`` of the magnetic axis [m].
+        B_toroidal: Toroidal field on the axis [T].
+        B_poloidal: Poloidal field per metre of minor radius times ``R`` [T];
+            the poloidal field is ``B_poloidal r / R``.
+    """
+
+    def __init__(self, major_radius, B_toroidal, B_poloidal):
+        self.major_radius = major_radius
+        self.B_toroidal = B_toroidal
+        self.B_poloidal = B_poloidal
+
+    @jit
+    def sqrtg(self, points):
+        return 1.
+
+    @jit
+    def B(self, points):
+        x, y, z = points
+        R2 = x**2 + y**2
+        R = jnp.sqrt(R2)
+        B_R = -self.B_poloidal * z / R
+        B_Z = self.B_poloidal * (R - self.major_radius) / R
+        B_phi_over_R = self.B_toroidal * self.major_radius / R2
+        return jnp.array([B_R * x / R - B_phi_over_R * y,
+                          B_R * y / R + B_phi_over_R * x,
+                          B_Z])
+
+    @jit
+    def to_xyz(self, points):
+        return points
+
+    def _tree_flatten(self):
+        return (self.major_radius, self.B_toroidal, self.B_poloidal), {}
+
+    @classmethod
+    def _tree_unflatten(cls, aux_data, children):
+        return cls(*children, **aux_data)
+
+
+tree_util.register_pytree_node(CircularTokamakField,
+                               CircularTokamakField._tree_flatten,
+                               CircularTokamakField._tree_unflatten)

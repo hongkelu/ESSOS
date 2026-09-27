@@ -1,0 +1,66 @@
+[
+ {
+  "method": "pyna open_lines",
+  "n_steps": 64,
+  "max_rel_length_error": 2.4578485894100055e-05,
+  "max_rel_derivative_error": 2.4578484107085075e-05,
+  "value_s": 0.006128056993475184,
+  "jacfwd_s": 0.00734227302018553
+ },
+ {
+  "method": "pyna open_lines",
+  "n_steps": 256,
+  "max_rel_length_error": 1.534880765818869e-06,
+  "max_rel_derivative_error": 1.5348806838844098e-06,
+  "value_s": 0.021185133984545246,
+  "jacfwd_s": 0.025676870020106435
+ },
+ {
+  "method": "pyna open_lines",
+  "n_steps": 1024,
+  "max_rel_length_error": 9.59251975629627e-08,
+  "max_rel_derivative_error": 9.592519956136414e-08,
+  "value_s": 0.07320233600330539,
+  "jacfwd_s": 0.09308999398490414
+ },
+ {
+  "method": "pyna open_lines",
+  "n_steps": 4096,
+  "max_rel_length_error": 5.995309804163185e-09,
+  "max_rel_derivative_error": 5.995307139627926e-09,
+  "value_s": 0.29149900400079787,
+  "jacfwd_s": 0.37197456101421267
+ },
+ {
+  "method": "essos connection_length",
+  "tolerance": 1e-06,
+  "max_rel_length_error": 2.746853715485109e-06,
+  "max_rel_derivative_error": 4.7906795081376075e-05,
+  "value_s": 0.0002820249937940389,
+  "jacfwd_s": 0.000814343016827479
+ },
+ {
+  "method": "essos connection_length",
+  "tolerance": 1e-08,
+  "max_rel_length_error": 1.8692606240655607e-08,
+  "max_rel_derivative_error": 1.0781710202412143e-06,
+  "value_s": 0.0003582809877116233,
+  "jacfwd_s": 0.0009383930009789765
+ },
+ {
+  "method": "essos connection_length",
+  "tolerance": 1e-10,
+  "max_rel_length_error": 1.7557599818474046e-10,
+  "max_rel_derivative_error": 2.26226982702471e-08,
+  "value_s": 0.0004747569910250604,
+  "jacfwd_s": 0.001230066001880914
+ },
+ {
+  "method": "essos connection_length",
+  "tolerance": 1e-12,
+  "max_rel_length_error": 2.2249979636512762e-12,
+  "max_rel_derivative_error": 1.2441606633828428e-09,
+  "value_s": 0.0006870969955343753,
+  "jacfwd_s": 0.0016425930080004036
+ }
+]
