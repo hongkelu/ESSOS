@@ -47,8 +47,18 @@ PF_POSITIONS = np.array([[1.10, 1.25], [2.40, 1.25], [2.85, 0.00], [2.80, -0.85]
 PF_BOUND = 2.5e6                                   # [A]
 WALL_R, WALL_Z, WALL_EXPONENT = (0.9, 2.65), (-1.5, 1.1), 8
 Z_FLOOR = WALL_Z[0]
+# DESIGN = "superx": drive the outer strike radius to TARGET_RADIUS (longer leg, more total flux
+# expansion) with a secondary Lc target. DESIGN = "long_lc": make the near-SOL connection length the
+# primary objective (low poloidal field along the leg); the strike point only has to stay on the floor.
+# DESIGN = "xpt": X-point target -- a secondary null on the outer leg above the floor, placed just
+# inside the near scrape-off layer, where the vanishing poloidal field lengthens field lines.
+DESIGN = os.environ.get("DESIGN", "superx")
+SECOND_NULL = np.array([1.85, -1.30])              # [m] X-point-target location (xpt)
+SECOND_NULL_SOL_DEPTH = float(os.environ.get("SECOND_NULL_SOL_DEPTH", 0.03))  # [m] flux label as midplane distance
+SECOND_NULL_DETERMINANT = -0.3                     # weak saddle: a wide low-poloidal-field region
 TARGET_RADIUS = 2.20                               # [m] Super-X outer strike radius
-LC_GAIN = 1.3                                      # requested near-SOL connection-length gain
+FLOOR_WINDOW = (1.6, 2.5)                          # [m] allowed outer strike radius for long_lc
+LC_GAIN = {"superx": 1.3, "long_lc": 2.0, "xpt": 3.0}[DESIGN]  # requested near-SOL connection-length gain
 SOL_R = np.linspace(2.055, 2.13, 16)               # [m] outboard midplane seeds, 5-80 mm outside the LCFS
 MAX_LENGTH, TOLERANCE = 400.0, 1e-9
 SCALE = 1.0e6
@@ -152,23 +162,60 @@ fx0 = float(flux_expansion_traced(jnp.asarray(base), jnp.asarray(Rt0)))
 
 # In vacuum psi is linear in the coil currents, so the isoflux conditions are exactly A x = b.
 # Moving only along the null space of A keeps the X-point and LCFS points fixed exactly.
-A = np.asarray(jax.jacfwd(isoflux)(jnp.asarray(base)))
+def second_null_conditions(pf_scaled):
+    """grad psi = 0 at SECOND_NULL and psi there on the flux surface SECOND_NULL_SOL_DEPTH outside the LCFS."""
+    psi_x = psi(jnp.asarray(XPOINT), pf_scaled)
+    depth = (psi(jnp.array([CONTROL[0, 0] + SECOND_NULL_SOL_DEPTH, 0.0]), pf_scaled) - psi_x)
+    return jnp.concatenate([jax.grad(psi)(jnp.asarray(SECOND_NULL), pf_scaled),
+                            jnp.array([psi(jnp.asarray(SECOND_NULL), pf_scaled) - psi_x - depth])])
+
+
+def linear_conditions(pf_scaled):
+    if DESIGN == "xpt":
+        return jnp.concatenate([isoflux(pf_scaled), second_null_conditions(pf_scaled)])
+    return isoflux(pf_scaled)
+
+
+# All conditions are affine in the currents: c(x) = c(start) + A (x - start). Start from the
+# least-change currents that satisfy them exactly and move only in the null space of A.
+A = np.asarray(jax.jacfwd(linear_conditions)(jnp.asarray(base)))
+start = base - np.linalg.pinv(A) @ np.asarray(linear_conditions(jnp.asarray(base)))
 NULL = np.linalg.svd(A)[2][A.shape[0]:].T           # (n_coils, n_coils - n_conditions)
+print(f"{A.shape[0]} exact linear conditions, {NULL.shape[1]} free directions", flush=True)
 
 
 def currents(z):
-    return jnp.asarray(base) + jnp.asarray(NULL) @ z
+    return jnp.asarray(start) + jnp.asarray(NULL) @ z
+
+
+def second_null_hessian_determinant(pf_scaled):
+    return jnp.linalg.det(jax.hessian(psi)(jnp.asarray(SECOND_NULL), pf_scaled))
+
+
+log_Lc0 = float(np.mean(np.log(Lc0)))
 
 
 @jax.jit
 def residuals(z):
     x = currents(z)
     Rt = target_radius(x, jnp.asarray(guess0))
-    mean_Lc = jnp.mean(sol_lengths(x))
-    # The poloidal flux expansion may not fall below its base value (one-sided).
-    return jnp.concatenate([jnp.array([(Rt - TARGET_RADIUS) / 0.02, (mean_Lc / target_Lc - 1.0) / 0.1,
-                                       100.0 * jnp.minimum(flux_expansion_traced(x, Rt) / fx0 - 1.0, 0.0)]),
-                            0.05 * (x - base)])
+    Lc = sol_lengths(x)
+    if DESIGN == "superx":
+        # The poloidal flux expansion may not fall below its base value (one-sided).
+        return jnp.concatenate([jnp.array([(Rt - TARGET_RADIUS) / 0.02, (jnp.mean(Lc) / target_Lc - 1.0) / 0.1,
+                                           100.0 * jnp.minimum(flux_expansion_traced(x, Rt) / fx0 - 1.0, 0.0)]),
+                                0.05 * (x - base)])
+    # Mean log Lc weights every seed of the band equally (the lines next to the separatrix would
+    # otherwise dominate); the strike point is only kept inside the floor window (one-sided).
+    terms = [(jnp.mean(jnp.log(Lc)) - log_Lc0 - jnp.log(LC_GAIN)) / 0.05]
+    if DESIGN == "xpt":
+        # A weak saddle (small negative det Hessian psi) widens the region of low poloidal field; the
+        # coil currents stay within PF_BOUND (one-sided).
+        terms.append((second_null_hessian_determinant(x) - SECOND_NULL_DETERMINANT) / 0.05)
+        terms.append(jnp.sum(jnp.maximum(jnp.abs(x) - PF_BOUND / SCALE, 0.0)) / 0.01)
+    else:
+        terms += [jnp.maximum(FLOOR_WINDOW[0] - Rt, 0.0) / 0.01, jnp.maximum(Rt - FLOOR_WINDOW[1], 0.0) / 0.01]
+    return jnp.concatenate([jnp.array(terms), 0.02 * (x - start)])
 
 
 jacobian = jax.jit(jax.jacfwd(residuals))
@@ -253,10 +300,15 @@ report = dict(
                             native_base=float(np.mean(native0)), native_optimized=float(np.mean(native1))),
     native_vs_essos_max_relative_difference=float(np.max(relative)), native_all_wall_terminated=native_terminated,
     optimized_isoflux_residuals=isoflux1.tolist(), seeds_R_m=SOL_R.tolist(),
+    second_null=dict(position_m=SECOND_NULL.tolist(), sol_depth_m=SECOND_NULL_SOL_DEPTH,
+                     conditions=np.asarray(second_null_conditions(jnp.asarray(optimized))).tolist(),
+                     hessian_determinant=float(second_null_hessian_determinant(jnp.asarray(optimized))))
+    if DESIGN == "xpt" else None,
     Lc_base_m=Lc0.tolist(), Lc_optimized_m=Lc1.tolist(), Lc_native_optimized_m=native1.tolist(), history=history,
     elapsed_seconds=perf_counter() - time0,
     limitation="Frozen plasma filaments (no free-boundary response), no coil force or vertical-stability limits.")
-with open(os.path.join(OUTPUT, "optimize_tokamak_superx.json"), "w") as file:
+report["design"] = DESIGN
+with open(os.path.join(OUTPUT, f"optimize_tokamak_{DESIGN}.json"), "w") as file:
     json.dump(report, file, indent=1)
 print(json.dumps({k: v for k, v in report.items() if k not in ("history", "Lc_base_m", "Lc_optimized_m",
                                                              "Lc_native_optimized_m", "seeds_R_m")}, indent=1), flush=True)
@@ -265,24 +317,25 @@ print(json.dumps({k: v for k, v in report.items() if k not in ("history", "Lc_ba
 Rg, Zg = np.meshgrid(np.linspace(0.6, 3.0, 121), np.linspace(-1.9, 1.45, 168))
 grid_points = jnp.stack([Rg.ravel(), Zg.ravel()], 1)
 fig, axes = plt.subplots(1, 3, figsize=(15, 6.5), gridspec_kw=dict(width_ratios=[1, 1, 1.2]))
-for ax, currents, title in ((axes[0], base, "base"), (axes[1], optimized, "Super-X")):
-    values = np.asarray(jax.jit(jax.vmap(lambda p: psi(p, jnp.asarray(currents))))(grid_points)).reshape(Rg.shape)
-    level = float(psi(jnp.asarray(XPOINT), jnp.asarray(currents)))
+label = {"superx": "Super-X", "long_lc": "long Lc", "xpt": "X-point target"}[DESIGN]
+for ax, coil_currents, title in ((axes[0], base, "base"), (axes[1], optimized, label)):
+    values = np.asarray(jax.jit(jax.vmap(lambda p: psi(p, jnp.asarray(coil_currents))))(grid_points)).reshape(Rg.shape)
+    level = float(psi(jnp.asarray(XPOINT), jnp.asarray(coil_currents)))
     ax.contour(Rg, Zg, values, 40, colors="0.8", linewidths=0.5)
     ax.contour(Rg, Zg, values, [level], colors="C3")
-    ax.scatter(*PF_POSITIONS.T, c=currents, cmap="coolwarm", vmin=-2.5, vmax=2.5, marker="s", s=70, edgecolors="k")
+    ax.scatter(*PF_POSITIONS.T, c=coil_currents, cmap="coolwarm", vmin=-2.5, vmax=2.5, marker="s", s=70, edgecolors="k")
     ax.plot(FILAMENTS[:, 0], FILAMENTS[:, 1], "b.", ms=3)
     ax.plot(*XPOINT, "kx")
     angle = np.linspace(0, 2 * np.pi, 400)
     ax.plot(0.5 * sum(WALL_R) + 0.5 * (WALL_R[1] - WALL_R[0]) * np.sign(np.cos(angle)) * np.abs(np.cos(angle)) ** 0.25,
             0.5 * sum(WALL_Z) + 0.5 * (WALL_Z[1] - WALL_Z[0]) * np.sign(np.sin(angle)) * np.abs(np.sin(angle)) ** 0.25, "k")
     ax.set(aspect="equal", xlim=(0.6, 3.0), ylim=(-1.9, 1.45), title=f"{title}: R_t = "
-           f"{float(target_radius(jnp.asarray(currents), guess0)):.2f} m", xlabel="R [m]", ylabel="Z [m]")
+           f"{float(target_radius(jnp.asarray(coil_currents), guess0)):.2f} m", xlabel="R [m]", ylabel="Z [m]")
 axes[2].plot(100 * (SOL_R - CONTROL[0, 0]), Lc0, "o-", ms=3, label="base (ESSOS)")
-axes[2].plot(100 * (SOL_R - CONTROL[0, 0]), Lc1, "o-", ms=3, label="Super-X (ESSOS)")
-axes[2].plot(100 * (SOL_R - CONTROL[0, 0]), native1, "k.", label="Super-X (Cyna grid)")
+axes[2].plot(100 * (SOL_R - CONTROL[0, 0]), Lc1, "o-", ms=3, label=f"{label} (ESSOS)")
+axes[2].plot(100 * (SOL_R - CONTROL[0, 0]), native1, "k.", label=f"{label} (Cyna grid)")
 axes[2].set(xlabel="distance outside LCFS at outboard midplane [cm]", ylabel=r"$L_c$ [m]",
             title="Near scrape-off-layer connection length")
 axes[2].legend(frameon=False)
 plt.tight_layout()
-plt.savefig(os.path.join(OUTPUT, "optimize_tokamak_superx.png"), dpi=140)
+plt.savefig(os.path.join(OUTPUT, f"optimize_tokamak_{DESIGN}.png"), dpi=140)

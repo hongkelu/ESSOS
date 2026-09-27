@@ -239,3 +239,33 @@ The plasma current is frozen (no free-boundary response) and coil forces and
 vertical stability are not constrained; this is stage 1 before coupling to a
 Grad-Shafranov solver. The gradient-free STEP study of Nunn et al., Phys.
 Plasmas 32, 072507 (2025), optimises a related connection-length objective.
+
+### Connection length as the primary objective: X-point target
+
+A longer leg alone raises Lc only modestly (Super-X above: +9.5 %), because Lc
+grows with B/B_p along the path. With Lc itself as the objective
+(`DESIGN=long_lc`, mean log Lc over the band, strike kept on the floor) the 7
+free directions gave +17 % and grew an uncontrolled null near the outer wall
+([report](../../benchmarks/manifold_optimization/results/tokamak-xpoint-target-20260927/long_lc_report.json)).
+`DESIGN=xpt` adds an X-point target: grad psi = 0 at (1.85, -1.30) m on the
+outer leg and psi there on the flux surface 3 cm outside the LCFS at the
+midplane. Both are linear in the currents and join the exact null-space
+constraints (9 conditions, 4 free directions); a weak saddle (det Hessian psi
+towards -0.3) widens the low-B_p region, and currents are kept near 2.5 MA
+([report](../../benchmarks/manifold_optimization/results/tokamak-xpoint-target-20260927/report.json)).
+
+| | Base | X-point target |
+| --- | ---: | ---: |
+| Near-SOL mean Lc, ESSOS / Cyna grid | 25.33 / 25.36 m | 31.81 / 31.83 m (+26 %) |
+| Lc at 2.5 cm / 3.0 cm outside the LCFS | 24.4 / 22.4 m | 44.1 / 53.8 m |
+| Poloidal flux expansion | 1.14 | 1.60 |
+| Secondary null det Hessian psi | - | -1.36 |
+
+The secondary-null conditions hold to 1e-15 and Cyna agrees per seed to 1.5 %.
+A strong saddle placed 1 cm out (det -9.4) lengthened only the lines inside
+its flux label (48 -> 67 m) for a +6 % mean: the gain is logarithmic near a
+null, so a wide low-field region matters more than the null itself. The weak-
+saddle target was not reached (-1.36 vs -0.3), the largest current is 2.54 MA
+(soft limit) and the primary separatrix becomes convoluted near the divertor.
+Coil positions, a snowflake-like second-order null and wall-conformity
+constraints are the next levers.
