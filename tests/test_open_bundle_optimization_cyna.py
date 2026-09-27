@@ -6,8 +6,7 @@ from pyna.toroidal.geometry import ToroidalWall
 from pyna.toroidal.control.strike_heat import StrikeSeedBundle
 from pyna.topo.clearance3d import TriangleWall
 from pyna.topo.open_validation import validate_open_bundle_3d
-from pyna.topo.open_lines import LaunchBundle
-from essos.open_bundle_optimization import OpenBundleObjective
+from essos.open_bundle_optimization import LaunchBundle, OpenBundleObjective
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 
@@ -37,8 +36,8 @@ def test_general_open_optimizer_requires_native_first_hit_and_whole_leg():
     def field(x,c):
         r=jnp.hypot(x[0],x[1]);return jnp.array([c[0]*x[0]/r-x[1],c[0]*x[1]/r+x[0],0.])
     objective=OpenBundleObjective(LaunchBundle(('a',),[[1.5,0.]],[1.]),field,
-        lambda rz,phi,w:rz[0]-w[0],lambda c:jnp.array([1.9]),lambda hits,lengths,w,c:hits[:,2],
-        production,(3.8,),(.2,),(4.,),'native-arbitrary-open',maximum_phi_shift=.5,n_steps=16)
+        lambda xyz,w:w[0]-jnp.hypot(xyz[0],xyz[1]),lambda c:jnp.array([1.9]),lambda hits,lengths,w,c:hits[:,2],
+        production,(3.8,),(.2,),(4.,),'native-arbitrary-open',maximum_phi_shift=.5,max_length=20.)
     problem=DesignProblem(objective.fingerprint,[.1],[.01],[.09],[.12])
     result=optimize_topology(problem,[.1],objective.model,objective.refresh,max_iterations=8)
     assert result.state.objective<1e-10

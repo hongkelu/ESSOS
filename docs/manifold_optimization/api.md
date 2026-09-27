@@ -27,11 +27,15 @@ check distinguishes constrained stationarity from an unresolved model decrease.
 
 ## Open lines and manifolds
 
-`pyna.topo.open_lines.LaunchBundle` declares fixed physical, moving physical,
-flux-labelled, or manifold-generated launches and whether quadrature weights
-move. Moving conventions require explicit differentiable launch/weight arrays;
-a label does not construct a flux surface. `trace_open_bundle` computes local
-wall events and connection lengths without a periodic-orbit dependency.
+`essos.open_bundle_optimization.LaunchBundle` declares fixed physical, moving
+physical, flux-labelled, or manifold-generated launches and whether quadrature
+weights move. Moving conventions require explicit differentiable launch/weight
+arrays; a label does not construct a flux surface. Local wall events and
+connection lengths come from `essos.dynamics.connection_length` (adaptive
+Dopri8 with event root finding, forward-mode derivatives through
+`adjoint=diffrax.ForwardMode()`), without a periodic-orbit dependency. Its
+accuracy and derivatives are checked against closed-form solutions in
+`tests/test_connection_length.py`.
 
 `essos.open_bundle_optimization.OpenBundleObjective` uses observables of
 `(hit_RZPhi, connection_lengths, weights, parameters)`. Its production callback

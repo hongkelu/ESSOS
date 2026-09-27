@@ -1742,11 +1742,13 @@ def trace_field_lines(
 
 
 def connection_length(field, initial_conditions, wall, *, max_length,
-                      tolerance=1.0e-8, max_steps=100000, adjoint=None):
+                      tolerance=1.0e-8, max_steps=100000, adjoint=None,
+                      directions=(1.0, -1.0)):
     """Connection length and wall strike points of field lines.
 
-    Each seed is followed along ``+B`` and ``-B`` by physical arclength until
-    it crosses the wall or reaches ``max_length``. The crossing is located by
+    Each seed is followed along ``+B`` and ``-B`` (or the signs given in
+    ``directions``) by physical arclength until it crosses the wall or reaches
+    ``max_length``. The crossing is located by
     Diffrax event root finding, so the strike point is exact up to
     ``tolerance`` rather than limited by a sampling interval. The result is
     differentiable with respect to the seeds and field parameters.
@@ -1765,14 +1767,21 @@ def connection_length(field, initial_conditions, wall, *, max_length,
             ``diffrax.RecursiveCheckpointAdjoint()``, supports reverse mode
             (``jax.grad``, ``jax.jacrev``); pass ``diffrax.ForwardMode()`` for
             ``jax.jvp`` and ``jax.jacfwd``.
+        directions: Signs along ``B`` to follow from every seed, ``+1`` and/or
+            ``-1``; the default traces both ways.
 
     Returns:
-        Dict with ``lengths`` ``(n, 2)`` (forward, backward), ``connection_length``
-        ``(n,)`` (their sum), ``strike_points`` ``(n, 2, 3)`` (end points; the
-        wall hit when ``hit`` is true) and ``hit`` ``(n, 2)`` booleans.
+        Dict with ``lengths`` ``(n, d)`` (one column per direction, forward then
+        backward by default), ``connection_length`` ``(n,)`` (their sum),
+        ``strike_points`` ``(n, d, 3)`` (end points; the wall hit when ``hit``
+        is true) and ``hit`` ``(n, d)`` booleans.
     """
     if float(max_length) <= 0.0:
         raise ValueError("max_length must be positive")
+    signs = np.asarray(directions, dtype=float).reshape(-1)  # static, also under an outer jit
+    if signs.size == 0 or not np.all(np.abs(signs) == 1.0):
+        raise ValueError("directions must be a nonempty sequence of +1 and -1")
+    signs = jnp.asarray(signs)
     distance = wall.evaluate_xyz if hasattr(wall, "evaluate_xyz") else wall
     controller = PIDController(rtol=tolerance, atol=tolerance)
     event = Event(lambda t, y, args, **kwargs: distance(y),
@@ -1795,7 +1804,6 @@ def connection_length(field, initial_conditions, wall, *, max_length,
         length = jnp.where(outside, 0.0, jnp.where(failed, jnp.nan, solution.ts[-1]))
         return length, jnp.where(outside, seed, solution.ys[-1]), hit | outside
 
-    signs = jnp.array([1.0, -1.0])
     trace = jit(vmap(vmap(trace_one, in_axes=(None, 0)), in_axes=(0, None)))
     lengths, points, hit = trace(jnp.asarray(initial_conditions, dtype=float), signs)
     return {"lengths": lengths, "connection_length": jnp.sum(lengths, axis=1),

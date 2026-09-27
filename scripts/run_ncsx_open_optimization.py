@@ -27,9 +27,8 @@ def main():
     from essos.coils import Coils
     from essos.fields import BiotSavart
     from essos.manifold import essos_field_to_pyna_cylindrical_grid
-    from essos.open_bundle_optimization import OpenBundleObjective
+    from essos.open_bundle_optimization import LaunchBundle,OpenBundleObjective
     from essos.topology_optimizer import DesignProblem,optimize_topology
-    from pyna.topo.open_lines import LaunchBundle
     from pyna.topo.open_validation import validate_open_bundle_3d
     from pyna.topo.clearance3d import TriangleWall
     from pyna.toroidal.control.strike_heat import StrikeSeedBundle,trace_wall_strikes_field
@@ -62,7 +61,7 @@ def main():
     # between toroidal sections. Integer cell/segment identities are piecewise
     # fixed and are checked through production correspondence and first hits.
     wall_r=jnp.asarray(wall.R);wall_z=jnp.asarray(wall.Z);nphi=len(wall.R);dphi=span/nphi
-    def wall_fn(rz,phi,unused):
+    def polygon_level(rz,phi):
         u=jnp.mod(phi,span)/dphi;lo=jnp.floor(u).astype(int);weight=u-lo
         points=jnp.column_stack(((1-weight)*wall_r[lo]+weight*wall_r[(lo+1)%nphi],
                                  (1-weight)*wall_z[lo]+weight*wall_z[(lo+1)%nphi]))
@@ -70,6 +69,11 @@ def main():
         t=jnp.clip(jnp.sum((rz-points)*edge,axis=1)/jnp.sum(edge*edge,axis=1),0,1)
         index=jnp.argmin(jnp.sum((rz-points-t[:,None]*edge)**2,axis=1))
         a=points[index];e=edge[index];return ((rz[0]-a[0])*e[1]-(rz[1]-a[1])*e[0])/jnp.linalg.norm(e)
+    # connection_length needs a Cartesian level set that is positive inside the
+    # vessel; orient the polygon distance by its sign at the (interior) launch.
+    inside=float(jnp.sign(polygon_level(jnp.array([1.7,.65]),0.)))
+    def wall_fn(xyz,unused):
+        return inside*polygon_level(jnp.array([jnp.hypot(xyz[0],xyz[1]),xyz[2]]),jnp.arctan2(xyz[1],xyz[0]))
     # Bound the difference between the input triangles and the interpolated
     # cylindrical wall: bilinear-vs-triangle cross term plus cylindrical sag.
     phi_nodes=np.arange(nphi+1)*dphi
@@ -103,7 +107,7 @@ def main():
         return checked
     objective=OpenBundleObjective(LaunchBundle(('fixed-vessel-launch',),[[1.7,.65]],[1.]),lambda x,c:physical(c).B(x),
         wall_fn,lambda c:jnp.zeros(0),lambda hits,lengths,w,c:hits[0,:2],production,target,(.001,.001),
-        (float(base.phi[0]),),'ncsx-vessel-fixed-launch-v1',maximum_phi_shift=.05,maximum_hit_discrepancy=.002,n_steps=64)
+        (float(base.phi[0]),),'ncsx-vessel-fixed-launch-v1',maximum_phi_shift=.05,maximum_hit_discrepancy=.002,max_length=10.)
     def constrained(value,c):
         value.equalities=np.array([np.sum(c)-3.]);value.equality_jacobian=np.ones((1,3));return value
     def refresh(c,s):return constrained(objective.refresh(c,s),c)

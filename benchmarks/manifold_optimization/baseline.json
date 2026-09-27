@@ -7,7 +7,7 @@
     },
     "pyna": {
       "url": "https://github.com/WenyinWei/pyna",
-      "commit": "e5810d5b7980775b5aa3217d0d03038bcc73aada"
+      "commit": "7059bad15f081e2210aa177804b14e602ea453fe"
     }
   },
   "inputs": [
@@ -26,7 +26,6 @@
         "tests/test_manifold_contracts.py",
         "tests/test_torus_solver.py",
         "tests/test_clearance3d.py",
-        "tests/test_open_lines.py",
         "tests/test_manifold_physics_conventions.py",
         "tests/test_circle_validation.py"
       ],
@@ -113,7 +112,6 @@
     "pyna/tests/test_manifold_contracts.py": 11,
     "pyna/tests/test_torus_solver.py": 4,
     "pyna/tests/test_clearance3d.py": 4,
-    "pyna/tests/test_open_lines.py": 1,
     "pyna/tests/test_manifold_physics_conventions.py": 2,
     "essos/tests/test_topology_optimizer.py": 6,
     "essos/tests/test_surface_optimization.py": 1,
@@ -130,7 +128,7 @@
     "essos/tests/test_manifold_coils.py::test_bounded_pf_current_step_reaches_a_first_wall_strike": 1,
     "essos/tests/test_manifold_coils.py::test_bounded_pf_coil_height_step_reaches_a_first_wall_strike": 1,
     "pyna/tests/test_toroidal_wall_interpolation_cyna.py": 3,
-    "essos/tests/test_connection_length.py": 9,
+    "essos/tests/test_connection_length.py": 11,
     "essos/tests/test_connection_length_cyna.py": 1
   }
 }

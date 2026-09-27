@@ -89,6 +89,36 @@ def test_connection_length_matches_circular_tokamak_plate_closed_form():
     assert jnp.all(lengths < max_length)
 
 
+def test_connection_length_traces_only_the_requested_direction():
+    field = CircularTokamakField(MAJOR_RADIUS, B_TOROIDAL, B_POLOIDAL)
+    seeds = jnp.stack([_seed(0.5, 0.0, 0.0), _seed(0.7, 1.2, 0.8)])
+    both = connection_length(field, seeds, _plate(PLATE_DEPTH), max_length=200.0, tolerance=TOLERANCE)
+    for column, sign in enumerate((1.0, -1.0)):
+        one = connection_length(field, seeds, _plate(PLATE_DEPTH), max_length=200.0,
+                                tolerance=TOLERANCE, directions=(sign,))
+        assert one["lengths"].shape == (2, 1)
+        assert jnp.allclose(one["lengths"][:, 0], both["lengths"][:, column], rtol=1e-12)
+        assert jnp.allclose(one["strike_points"][:, 0], both["strike_points"][:, column], atol=1e-12)
+    with pytest.raises(ValueError, match="directions"):
+        connection_length(field, seeds, _plate(PLATE_DEPTH), max_length=200.0, directions=(0.5,))
+
+
+def test_connection_length_compiles_once_inside_an_outer_jit():
+    seeds = jnp.stack([_seed(0.5, 0.0, 0.0), _seed(0.7, 1.2, 0.8)])
+
+    @jax.jit
+    def lengths(B_poloidal, depth):
+        field = CircularTokamakField(MAJOR_RADIUS, B_TOROIDAL, B_poloidal)
+        return connection_length(field, seeds, _plate(depth), max_length=200.0,
+                                 tolerance=TOLERANCE, directions=(1.0,))["lengths"][:, 0]
+
+    for B_poloidal, depth in ((B_POLOIDAL, PLATE_DEPTH), (0.9, 0.35)):
+        field = CircularTokamakField(MAJOR_RADIUS, B_TOROIDAL, B_poloidal)
+        expected = circular_tokamak_plate_solution(field, depth, seeds)[0][:, 0]
+        assert jnp.allclose(lengths(B_poloidal, depth), expected, rtol=1e-8)
+    assert lengths._cache_size() == 1
+
+
 def test_connection_length_caps_circular_tokamak_lines_that_miss_the_plate():
     field = CircularTokamakField(MAJOR_RADIUS, B_TOROIDAL, B_POLOIDAL)
     seeds = jnp.stack([_seed(0.3, 0.0, 0.0), _seed(0.39, 2.0, 1.0)])

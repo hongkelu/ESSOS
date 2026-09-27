@@ -1,9 +1,9 @@
 import numpy as np
 import jax.numpy as jnp
 import pytest
-from pyna.topo.open_lines import LaunchBundle
-from pyna.topo.open_validation import OpenBundleValidation
-from essos.open_bundle_optimization import OpenBundleObjective
+pytest.importorskip("pyna.topo.open_validation")
+from pyna.topo.open_validation import OpenBundleValidation  # noqa: E402
+from essos.open_bundle_optimization import LaunchBundle, OpenBundleObjective  # noqa: E402
 from essos.topology_optimizer import DesignProblem,optimize_topology
 
 
@@ -11,7 +11,7 @@ def test_general_open_objective_independent_refresh_and_moving_wall():
     bundle=LaunchBundle(('a',),[[2.,0.]],[1.])
     def field(x,c):
         r=jnp.hypot(x[0],x[1]);return jnp.array([-x[1]/r,x[0]/r,c[0]/r])
-    def wall(rz,phi,w):return rz[1]-w[0]
+    def wall(xyz,w):return w[0]-xyz[2]  # below the plane z = w, positive inside
     calls=[]
     def production(c,s):
         # Independent exact helix/plane intersection and analytic arc length.
@@ -20,7 +20,7 @@ def test_general_open_objective_independent_refresh_and_moving_wall():
         return OpenBundleValidation(True,'analytic_verified',[[2.,height,phi]],[length],())
     objective=OpenBundleObjective(bundle,field,wall,lambda c:jnp.array([1.+c[1]]),
         lambda hits,lengths,w,c:jnp.array([hits[0,2],hits[0,1]]),production,
-        (1.8,1.05),(.2,.1),(2.,),'analytic-moving-wall',maximum_phi_shift=.5,n_steps=16)
+        (1.8,1.05),(.2,.1),(2.,),'analytic-moving-wall',maximum_phi_shift=.5,max_length=20.)
     initial=objective.refresh(np.array([.5,0.]),{})
     local=objective.model(np.array([.5,0.]),initial.snapshot)
     np.testing.assert_allclose(local.jacobian,[[-20.,10.],[0.,10.]],atol=1e-10)
