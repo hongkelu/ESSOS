@@ -634,3 +634,86 @@ class CircularTokamakField(MagneticField):
 tree_util.register_pytree_node(CircularTokamakField,
                                CircularTokamakField._tree_flatten,
                                CircularTokamakField._tree_unflatten)
+
+
+def _elliptic_KE(m, iterations=12):
+    """Complete elliptic integrals K(m), E(m) (parameter m = k^2) by the arithmetic-geometric mean."""
+    a, b = jnp.ones_like(m), jnp.sqrt(1.0 - m)
+    power, total = 0.5, 0.5 * m
+    for _ in range(iterations):
+        c = 0.5 * (a - b)
+        a, b = 0.5 * (a + b), jnp.sqrt(a * b)
+        power = 2.0 * power
+        total = total + power * c**2
+    K = jnp.pi / (2.0 * a)
+    return K, K * (1.0 - total)
+
+
+class CircularLoopsField(MagneticField):
+    """Exact field of coaxial circular current loops about the z axis, in Cartesian coordinates.
+
+    Uses the closed forms in complete elliptic integrals, so the field is exactly
+    axisymmetric (no discretisation ripple) and differentiable in the loop radii,
+    heights and currents. Also provides the poloidal flux ``psi = R A_phi``.
+
+    Args:
+        radii: Loop radii ``R_c`` [m].
+        heights: Loop heights ``Z_c`` [m].
+        currents: Loop currents [A] (ampere-turns for multi-turn coils).
+    """
+
+    def __init__(self, radii, heights, currents):
+        self.radii = jnp.asarray(radii, dtype=float)
+        self.heights = jnp.asarray(heights, dtype=float)
+        self.currents = jnp.asarray(currents, dtype=float)
+
+    def _geometry(self, R, Z):
+        dz = Z - self.heights
+        plus = (self.radii + R) ** 2 + dz**2
+        m = 4.0 * self.radii * R / plus
+        K, E = _elliptic_KE(m)
+        return dz, plus, m, K, E
+
+    @jit
+    def B_cylindrical(self, R, Z):
+        """(B_R, B_Z) at cylindrical radius R and height Z."""
+        dz, plus, m, K, E = self._geometry(R, Z)
+        minus = (self.radii - R) ** 2 + dz**2
+        factor = 2e-7 * self.currents / jnp.sqrt(plus)
+        B_Z = factor * (K + (self.radii**2 - R**2 - dz**2) / minus * E)
+        B_R = factor * dz / R * (-K + (self.radii**2 + R**2 + dz**2) / minus * E)
+        return jnp.sum(B_R), jnp.sum(B_Z)
+
+    @jit
+    def psi(self, R, Z):
+        """Poloidal flux R A_phi [Wb/rad]."""
+        _, plus, m, K, E = self._geometry(R, Z)
+        A_phi = 4e-7 * self.currents * jnp.sqrt(self.radii / R) / jnp.sqrt(m) * ((1.0 - 0.5 * m) * K - E)
+        return R * jnp.sum(A_phi)
+
+    @jit
+    def B(self, points):
+        x, y, z = points
+        R = jnp.sqrt(x**2 + y**2)
+        B_R, B_Z = self.B_cylindrical(R, z)
+        return jnp.array([B_R * x / R, B_R * y / R, B_Z])
+
+    @jit
+    def sqrtg(self, points):
+        return 1.
+
+    @jit
+    def to_xyz(self, points):
+        return points
+
+    def _tree_flatten(self):
+        return (self.radii, self.heights, self.currents), {}
+
+    @classmethod
+    def _tree_unflatten(cls, aux_data, children):
+        return cls(*children, **aux_data)
+
+
+tree_util.register_pytree_node(CircularLoopsField,
+                               CircularLoopsField._tree_flatten,
+                               CircularLoopsField._tree_unflatten)

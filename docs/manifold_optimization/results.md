@@ -269,3 +269,33 @@ saddle target was not reached (-1.36 vs -0.3), the largest current is 2.54 MA
 (soft limit) and the primary separatrix becomes convoluted near the divertor.
 Coil positions, a snowflake-like second-order null and wall-conformity
 constraints are the next levers.
+
+
+## ITER divertor: connection length with strikes on the real targets
+
+[`examples/manifold_optimization/optimize_iter_divertor.py`](../../examples/manifold_optimization/optimize_iter_divertor.py)
+uses the ITER first wall/divertor contour and CS/PF coils of the Open FUSION Toolkit TokaMaker
+example and the plasma of a TokaMaker free-boundary equilibrium with the ITER reference coil
+currents (15.6 MA, q95 = 2.78), frozen as 181 exterior-equivalent filaments
+([preparation](../../scripts/iter_reference/README.md)). All fields are exact circular-loop fields
+(`essos.fields.CircularLoopsField`, checked against Biot-Savart in `tests/test_circular_loops.py`).
+The 12 coil currents keep the X-point and six LCFS points exactly (4 free directions) and
+maximise the mean log connection length 0.2-3.7 cm outside the LCFS at the outboard midplane,
+subject to: both strikes on their vertical targets at least 10 cm from the ends, incidence
+angle at least 1 deg, the reference first-wall clearance (4.97 cm mapped to the midplane) on
+every main-chamber wall vertex, and approximate ITER coil limits
+([report](../../benchmarks/manifold_optimization/results/iter-divertor-20260927/report.json)).
+
+| | Reference | Optimized |
+| --- | ---: | ---: |
+| Near-SOL mean Lc, ESSOS / Cyna | 166.6 / 166.6 m | 175.0 / 175.0 m (+5.0 %) |
+| Lc at 0.2 / 1.5 / 3.7 cm | 210 / 166 / 149 m | 213 / 172 / 169 m |
+| Outer strike: distance from target bottom, incidence | 16.2 cm, 2.27 deg | 17.4 cm, 2.26 deg |
+| Inner strike: distance from target end, incidence | 12.6 cm, 2.64 deg | 11.9 cm, 2.64 deg |
+
+Cyna agrees per seed to 0.05 %. Two exploits had to be closed on the way: at tolerance 1e-8
+the optimizer inflated long traced lengths by integration error (192 vs 178 m at 1e-10), and
+without the first-wall gap it raised the plasma top so that outer-SOL lines skimmed the upper
+first wall (per-seed Lc spikes that Cyna did not reproduce). With a fixed shape, the ITER PF set
+and a frozen plasma the leverage on Lc is modest; the plasma response (TokaMaker coupling),
+coil positions and divertor-coil additions are the next levers.
