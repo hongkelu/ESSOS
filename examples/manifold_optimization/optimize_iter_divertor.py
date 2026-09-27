@@ -61,7 +61,15 @@ TARGET_MARGIN, MIN_GRAZING_ANGLE = 0.10, np.deg2rad(1.0)
 # equilibrium's own clearance, so the scrape-off layer keeps connecting to the divertor targets and
 # is neither limited nor skimmed by the first wall. The seed band stays inside 75 % of that gap.
 MAIN_CHAMBER = np.r_[WALL[:18], WALL[48:-1]]
-LC_GAIN = 2.0
+# DESIGN = "heat" (default): seeds inside the heat channel, 0.25-6 lambda_q from the separatrix, with the
+# objective weighted by the exponential heat-flux profile exp(-r / lambda_q); lambda_q from the Eich
+# regression #14, 0.63 mm * B_pol,omp[T]^-1.19 (Eich et al., Nucl. Fusion 53, 093031). DESIGN = "band":
+# unweighted band out to 75 % of the first-wall gap.
+DESIGN = os.environ.get("DESIGN", "heat")
+LC_GAIN = 1.5 if DESIGN == "heat" else 2.0
+# Optional X-point flattening target, det(Hessian psi) at the X-point (reference about -8.2); a
+# flatter X-point lowers B_pol around it and lengthens near-separatrix field lines.
+XPOINT_DET = float(os.environ["XPOINT_DET"]) if "XPOINT_DET" in os.environ else None
 # A loose tolerance lets the optimizer exploit tracing error on long lines (seen at 1e-8).
 MAX_LENGTH, TOLERANCE = 2000.0, 1e-10
 
@@ -147,7 +155,17 @@ def reference_wall_gap():
 
 
 WALL_GAP = reference_wall_gap()
-SOL_R = MIDPLANE[0] + np.linspace(0.002, 0.75 * WALL_GAP, 12)
+B_pol_omp = float(jnp.hypot(*loops(jnp.asarray(REFERENCE)).B_cylindrical(MIDPLANE[0] + 1e-4, MIDPLANE[1])))
+LAMBDA_Q = 0.63e-3 * B_pol_omp ** -1.19
+if DESIGN == "heat":
+    SOL_R = MIDPLANE[0] + LAMBDA_Q * np.array([0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+    WEIGHTS = np.exp(-(SOL_R - MIDPLANE[0]) / LAMBDA_Q)
+else:
+    SOL_R = MIDPLANE[0] + np.linspace(0.002, 0.75 * WALL_GAP, 12)
+    WEIGHTS = np.ones(len(SOL_R))
+WEIGHTS = WEIGHTS / WEIGHTS.sum()
+print(f"B_pol,omp = {B_pol_omp:.3f} T, lambda_q (Eich #14) = {1e3 * LAMBDA_Q:.3f} mm; seeds "
+      f"{np.round(1e3 * (SOL_R - MIDPLANE[0]), 3)} mm", flush=True)
 print(f"reference first-wall gap mapped to the outboard midplane: {100 * WALL_GAP:.2f} cm", flush=True)
 seeds = jnp.stack([jnp.asarray(SOL_R), jnp.zeros(len(SOL_R)), jnp.full(len(SOL_R), MIDPLANE[1])], 1)
 
@@ -165,7 +183,7 @@ start = REFERENCE - np.linalg.pinv(A) @ np.asarray(isoflux(jnp.asarray(REFERENCE
 NULL = np.linalg.svd(A)[2][A.shape[0]:].T
 currents = lambda z: jnp.asarray(start) + jnp.asarray(NULL) @ z  # noqa: E731
 Lc0, hit0 = map(np.asarray, jax.jit(sol_lengths)(jnp.asarray(start)))
-log_Lc0 = float(np.mean(np.log(Lc0)))
+log_Lc0 = float(np.sum(WEIGHTS * np.log(Lc0)))
 outer0, inner0 = [jax.jit(lambda x, t=t: strike(x, t))(jnp.asarray(start)) for t in (OUTER_TARGET, INNER_TARGET)]
 print(f"{A.shape[0]} exact conditions, {NULL.shape[1]} free directions; reference mean Lc {np.mean(Lc0):.1f} m "
       f"(all hit wall: {bool(hit0.all())}); outer strike {np.asarray(outer0[0])}, angle "
@@ -177,7 +195,9 @@ print(f"{A.shape[0]} exact conditions, {NULL.shape[1]} free directions; referenc
 def residuals(z):
     x = currents(z)
     Lc, _ = sol_lengths(x)
-    terms = [(jnp.mean(jnp.log(Lc)) - log_Lc0 - jnp.log(LC_GAIN)) / 0.05]
+    terms = [(jnp.sum(jnp.asarray(WEIGHTS) * jnp.log(Lc)) - log_Lc0 - jnp.log(LC_GAIN)) / 0.05]
+    if XPOINT_DET is not None:
+        terms.append((jnp.linalg.det(jax.hessian(psi)(jnp.asarray(XPOINT), x)) - XPOINT_DET) / 0.1)
     for target in (OUTER_TARGET, INNER_TARGET):
         _, before, after, miss, angle = strike(x, target)
         terms += [miss / 0.01, jnp.maximum(TARGET_MARGIN - before, 0.0) / 0.01,
@@ -238,6 +258,13 @@ report = dict(
     all_lines_hit_wall=dict(start=bool(hit0.all()), optimized=bool(hit1.all()), native=native_terminated),
     native_vs_essos_max_relative_difference=float(np.max(np.abs(native1 / Lc1_tight - 1.0))),
     isoflux_residual_max=float(np.max(np.abs(np.asarray(isoflux(jnp.asarray(optimized)))))),
+    design=DESIGN, lambda_q_mm=1e3 * LAMBDA_Q, B_pol_omp_T=B_pol_omp, seed_weights=WEIGHTS.tolist(),
+    heat_weighted_Lc_m=dict(start=float(np.exp(np.sum(WEIGHTS * np.log(Lc0)))),
+                            optimized=float(np.exp(np.sum(WEIGHTS * np.log(Lc1_tight)))),
+                            native_optimized=float(np.exp(np.sum(WEIGHTS * np.log(native1))))),
+    xpoint_hessian_determinant=dict(start=float(jnp.linalg.det(jax.hessian(psi)(jnp.asarray(XPOINT), jnp.asarray(start)))),
+                                    optimized=float(jnp.linalg.det(jax.hessian(psi)(jnp.asarray(XPOINT),
+                                                                                  jnp.asarray(optimized))))),
     wall_gap_violation_max_Wb=dict(start=float(np.max(np.asarray(wall_gap_violation(jnp.asarray(start))))),
                                    optimized=float(np.max(np.asarray(wall_gap_violation(jnp.asarray(optimized)))))),
     seeds_R_m=SOL_R.tolist(), seeds_Z_m=float(MIDPLANE[1]), Lc_start_m=Lc0.tolist(), Lc_optimized_m=Lc1.tolist(),
@@ -245,7 +272,7 @@ report = dict(
     source=DATA["source"], plasma_field_model_error=DATA["max_poloidal_field_error"],
     limitation="Frozen plasma current (no free-boundary response); coils as single circular filaments; "
                "approximate coil limits; no forces, vertical stability or heat-flux model.")
-with open(os.path.join(OUTPUT, "optimize_iter_divertor.json"), "w") as file:
+with open(os.path.join(OUTPUT, f"optimize_iter_divertor_{DESIGN}.json"), "w") as file:
     json.dump(report, file, indent=1)
 print(json.dumps({k: v for k, v in report.items() if k not in ("history", "Lc_start_m", "Lc_optimized_m",
                                                              "Lc_native_optimized_m", "seeds_R_m")}, indent=1), flush=True)
@@ -268,11 +295,13 @@ for ax, lim in ((axes[0], (3.9, 8.6, -4.7, 4.8)), (axes[1], (4.0, 6.4, -4.65, -3
     ax.set(aspect="equal", xlim=lim[:2], ylim=lim[2:], xlabel="R [m]", ylabel="Z [m]")
 axes[0].set_title("ITER: reference (blue) and optimized (red)")
 axes[1].set_title("divertor: separatrix and strike points")
-axes[2].plot(100 * (SOL_R - MIDPLANE[0]), Lc0, "o-", ms=3, label="reference (ESSOS)")
-axes[2].plot(100 * (SOL_R - MIDPLANE[0]), Lc1, "o-", ms=3, color="C3", label="optimized (ESSOS)")
-axes[2].plot(100 * (SOL_R - MIDPLANE[0]), native1, "k.", label="optimized (Cyna)")
-axes[2].set(xlabel="distance outside LCFS at outboard midplane [cm]", ylabel=r"$L_c$ [m]",
+axes[2].plot(1e3 * (SOL_R - MIDPLANE[0]), Lc0, "o-", ms=3, label="reference (ESSOS)")
+axes[2].plot(1e3 * (SOL_R - MIDPLANE[0]), Lc1, "o-", ms=3, color="C3", label="optimized (ESSOS)")
+axes[2].plot(1e3 * (SOL_R - MIDPLANE[0]), native1, "k.", label="optimized (Cyna)")
+if DESIGN == "heat":
+    axes[2].axvline(1e3 * LAMBDA_Q, color="0.6", ls=":", label=r"$\lambda_q$ (Eich)")
+axes[2].set(xlabel="distance outside LCFS at outboard midplane [mm]", ylabel=r"$L_c$ [m]",
             title="Near scrape-off-layer connection length")
 axes[2].legend(frameon=False)
 plt.tight_layout()
-plt.savefig(os.path.join(OUTPUT, "optimize_iter_divertor.png"), dpi=140)
+plt.savefig(os.path.join(OUTPUT, f"optimize_iter_divertor_{DESIGN}.png"), dpi=140)

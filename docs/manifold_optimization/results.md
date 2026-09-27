@@ -299,3 +299,20 @@ without the first-wall gap it raised the plasma top so that outer-SOL lines skim
 first wall (per-seed Lc spikes that Cyna did not reproduce). With a fixed shape, the ITER PF set
 and a frozen plasma the leverage on Lc is modest; the plasma response (TokaMaker coupling),
 coil positions and divertor-coil additions are the next levers.
+
+### ITER: connection length inside the heat channel
+
+The outboard-midplane poloidal field of this equilibrium is 1.38 T, so the Eich regression #14
+gives lambda_q = 0.43 mm (turbulence simulations have suggested several mm). The band above
+(0.2-3.7 cm, i.e. 5-90 lambda_q) carries almost no power. `DESIGN=heat` (the default) launches
+at 0.25-6 lambda_q and weights log Lc by exp(-r / lambda_q)
+([report](../../benchmarks/manifold_optimization/results/iter-divertor-20260927/heat_channel_report.json)):
+heat-weighted Lc rises by only about 1.3 % (e.g. 244.7 -> 248.1 m at r = lambda_q), with Cyna
+agreeing per seed to 0.7 % and all constraints met. Near-separatrix Lc is set by the X-point
+geometry, and the X-point Hessian barely moved (det -8.20 -> -8.17). Forcing it towards -4
+(`XPOINT_DET=-4`,
+[report](../../benchmarks/manifold_optimization/results/iter-divertor-20260927/heat_channel_xpoint_flattening_report.json))
+reached only -7.66 with CS1L and PF1 at their limits and the outer strike 2.3 cm from the target
+end, for about +1 % in Lc. With a fixed shape and a frozen plasma, ITER's CS/PF set has almost no
+leverage on connection length in the heat channel; extra divertor coils or non-axisymmetric
+(correction/ELM) coils are needed.
