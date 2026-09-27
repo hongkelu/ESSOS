@@ -164,3 +164,44 @@ native trajectory discrepancy is about `0.011 mm`. Sampled exterior-field
 refinement passes at 5, 10 and 20 cm normal offsets from the LCFS; closer
 points need additional quadrature or a qualified surface treatment. See the
 [VMEX integration report](vmex_integration.md) for domains, limits and evidence.
+
+
+## Connection-length benchmarks and tokamak SOL connection-length control
+
+`essos.dynamics.connection_length` is checked against closed-form solutions in
+`tests/test_connection_length.py`: an exactly solvable circular tokamak
+(`essos.fields.CircularTokamakField`) with a divertor plate gives lengths to
+1e-8, strike points to 1e-7 m, the pi q R limit, and B_poloidal, plate-depth
+and seed derivatives in reverse and forward mode (`adjoint=diffrax.ForwardMode()`).
+Near a hyperbolic X-line the error grows like tolerance / u0, the distance to
+the X-line, and the test states that bound. Native Cyna wall hits converge to
+the same closed form under grid refinement. Against these references
+`connection_length` under `jit` is 30-400x faster than the former pyna
+fixed-step open-line tracer at equal accuracy
+([comparison](../../benchmarks/manifold_optimization/results/connection-length-20260926/open_lines_vs_connection_length.json)),
+which was removed.
+
+[`examples/manifold_optimization/optimize_tokamak_connection_length.py`](../../examples/manifold_optimization/optimize_tokamak_connection_length.py)
+raises the mean connection length of 64 field lines across the outboard
+scrape-off layer of the regression tokamak (vacuum coils, frozen plasma
+current loop, smooth superellipse vessel) with PF current and height, a
+divertor coil and a TF factor limited to +-3 %, while holding the X-point
+([report](../../benchmarks/manifold_optimization/results/tokamak-connection-length-20260927/report.json)).
+Least squares with forward-mode Jacobians of `connection_length` and of the
+X-point (`essos.topology.periodic_xline_state`) converges in 15 evaluations
+(28 s) to a stationary compromise:
+
+| | Initial | Optimized |
+| --- | ---: | ---: |
+| Mean SOL Lc, ESSOS | 5.036 m | 5.440 m (+8.0 %) |
+| Mean SOL Lc, Cyna grid | 5.073 m | 5.489 m (+8.2 %) |
+| X-point (R, Z) | (1.4702, -0.0901) m | (1.4732, -0.0964) m |
+
+The +30 % target is not reached: the result is the weighted balance with the
+X-point constraint (7 mm displacement against a 5 mm scale) and the control
+regularisation. Cyna agrees with ESSOS to a median 0.27 % per seed; 5 of 64
+seeds differ by more than 1 %, all at jumps of Lc where a line changes the
+number of turns before striking. Lc is piecewise smooth in the controls and
+automatic differentiation sees only the smooth part; a box wall made these
+jumps frequent enough to stall the optimizer (first-order optimality 91 vs 5
+with the smooth wall). This is a regression geometry, not a device design.

@@ -7,7 +7,7 @@
     },
     "pyna": {
       "url": "https://github.com/WenyinWei/pyna",
-      "commit": "7059bad15f081e2210aa177804b14e602ea453fe"
+      "commit": "8f063f48110ea968adef0e5627a7fc181092bb6e"
     }
   },
   "inputs": [
@@ -84,7 +84,7 @@
   },
   "expected_counts": {
     "pyna/tests/test_jax_poincare.py": 6,
-    "pyna/tests/test_jax_periodic.py": 9,
+    "pyna/tests/test_jax_periodic.py": 10,
     "pyna/tests/test_jax_manifold.py": 7,
     "pyna/tests/test_jax_strike.py": 13,
     "pyna/tests/test_torus_deformation.py": 25,
