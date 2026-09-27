@@ -205,3 +205,37 @@ number of turns before striking. Lc is piecewise smooth in the controls and
 automatic differentiation sees only the smooth part; a box wall made these
 jumps frequent enough to stall the optimizer (first-order optimality 91 vs 5
 with the smooth wall). This is a regression geometry, not a device design.
+
+
+## Tokamak Super-X by divertor-coil currents
+
+[`examples/manifold_optimization/optimize_tokamak_superx.py`](../../examples/manifold_optimization/optimize_tokamak_superx.py)
+moves the outer strike point of a lower-single-null tokamak outward along the
+divertor floor at fixed plasma shape
+([report](../../benchmarks/manifold_optimization/results/tokamak-superx-20260927/report.json)).
+The field is an axisymmetric 1/R toroidal field (no TF ripple), a frozen plasma
+current on 13 filaments and 13 poloidal-field coils (4 shaping, 9 divertor). The
+poloidal flux psi = R A_phi comes from the same discretised loops as the traced
+field. In vacuum psi is linear in the coil currents, so the isoflux conditions
+(grad psi = 0 at the X-point, psi = psi_X at four LCFS points) are exact linear
+constraints; the optimizer moves only in their null space. It drives the strike
+radius R_t (outer root of psi(R, Z_floor) = psi_X) towards 2.2 m, asks for more
+near-SOL connection length and keeps the poloidal flux expansion from falling.
+
+| | Base | Super-X |
+| --- | ---: | ---: |
+| Outer strike radius R_t (psi) | 1.795 m | 2.164 m |
+| Strike of a traced line 0.1 mm outside the LCFS | 1.795 m | 2.162 m |
+| Total flux expansion R_t / R_u | 0.875 | 1.056 |
+| Poloidal flux expansion | 1.136 | 1.133 |
+| Near-SOL mean Lc, ESSOS / Cyna grid | 25.33 / 25.36 m | 27.75 / 27.76 m |
+
+The X-point and LCFS conditions hold to 1.4e-6 Wb, the largest coil current is
+0.93 MA, and Cyna agrees with ESSOS per seed to 0.11 %. With only the first 8
+coils (2 null-space directions) the strike still moved to 2.02 m, but the
+poloidal flux expansion fell from 1.39 to 0.56 and Lc did not grow: extra
+divertor coils are what keep the poloidal field low along the extended leg.
+The plasma current is frozen (no free-boundary response) and coil forces and
+vertical stability are not constrained; this is stage 1 before coupling to a
+Grad-Shafranov solver. The gradient-free STEP study of Nunn et al., Phys.
+Plasmas 32, 072507 (2025), optimises a related connection-length objective.
