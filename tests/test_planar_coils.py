@@ -171,3 +171,15 @@ def test_current_potential_reproduces_a_potential_and_hands_it_to_coils():
     assert currents.shape == (len(dipoles),) and np.all(np.isfinite(currents)) and np.abs(currents).max() > 0
     local = sheet.potential(coefficients, dipoles.theta, dipoles.phi)                # the potential under each coil
     assert np.corrcoef(local, currents)[0, 1] > 0.9
+
+
+def test_shaping_coils_of_several_sizes_fill_the_gaps_without_touching():
+    boundary = FourierBoundary([1.0, 0.2, 0.05], [0.0, 0.2, -0.05], [0, 1, 1], [0, 0, 2])
+    large = shaping_coils(boundary, 2, 0.12, 0.05, 0.02, 1.0)
+    mixed = shaping_coils(boundary, 2, 0.12, [0.02, 0.05], 0.02, 1.0)
+    assert len(mixed) > len(large) and set(np.unique(mixed.radius)) == {0.02, 0.05}
+    np.testing.assert_allclose(mixed.centres[:len(large)], large.centres)          # the large coils come first, unchanged
+    centres = np.asarray(mixed.expanded(mixed.initial_parameters())[0]).mean(axis=1)
+    radii = np.tile(mixed.radius, 4)
+    gap = np.linalg.norm(centres[:, None] - centres[None], axis=-1) - radii[:, None] - radii[None] + 10 * np.eye(len(centres))
+    assert gap.min() >= 0.02 - 1e-12

@@ -38,7 +38,11 @@ PLASMA_DISTANCE = float(os.environ.get("PLASMA_DISTANCE", 0.67))
 ENCIRCLING_DISTANCE = 0.67
 ENCIRCLING_SHAPING_DISTANCE = 0.34
 SHAPING_DISTANCE = float(os.environ.get("SHAPING_DISTANCE", 0.08))
-SHAPING_RADIUS = float(os.environ.get("SHAPING_RADIUS", 0.2))
+# Shaping-coil radii, largest first; smaller sizes fill the gaps the larger ones leave:
+SHAPING_RADII = [float(v) for v in os.environ.get("SHAPING_RADII", os.environ.get("SHAPING_RADIUS", "0.2")).split(",")]
+SHAPING_RADIUS = max(SHAPING_RADII)
+# True scales each coil's current limit with its radius (same field at the conductor); False gives every coil the same limit:
+LIMIT_SCALES_WITH_RADIUS = os.environ.get("LIMIT_SCALES_WITH_RADIUS", "1") == "1"
 CURVATURE_LIMIT = 2.67
 LENGTH_LIMIT = float(os.environ.get("LENGTH_LIMIT", 24.0))             # encircling-coil length (Helios: 20 minor radii)
 REGULARIZATION = float(os.environ.get("REGULARIZATION", 1e-13))        # T^2 / A^2
@@ -143,21 +147,24 @@ print(f"optimization took {time() - t_start:.1f} s, {result.nit} iterations: {re
 results["optimized"], coefficients = describe("optimized", parameters)
 
 """ Discrete shaping coils for what is left """
-shaping = shaping_coils(boundary, NFP, PLASMA_DISTANCE * minor, SHAPING_RADIUS * minor, SHAPING_DISTANCE * minor, mean_current)
+shaping = shaping_coils(boundary, NFP, PLASMA_DISTANCE * minor, np.array(SHAPING_RADII) * minor, SHAPING_DISTANCE * minor, mean_current)
+relative_size = shaping.radius / shaping.radius.max() if LIMIT_SCALES_WITH_RADIUS else np.ones(len(shaping))
 p_shaping = shaping.initial_parameters()
 normal_of_coil = jax.jit(lambda c: jnp.sum(shaping.B(p_shaping | dict(current=c), points) * normals, axis=1))
 coil_matrix = np.stack([np.asarray(normal_of_coil(jnp.zeros(len(shaping)).at[i].set(1.0))) for i in range(len(shaping))], axis=1)
 r = np.asarray(left(parameters))
 handed = sheet.coil_currents(coefficients, shaping) / mean_current
 after = np.abs(r - coil_matrix @ handed) / B_norm
-print(f"{len(shaping)} shaping coils per half period ({2 * NFP * len(shaping)} in all), radius {SHAPING_RADIUS * minor:.3f} m")
+sizes = ", ".join(f"{int(np.sum(np.isclose(shaping.radius, r * minor)))} of radius {r} a" for r in sorted(SHAPING_RADII, reverse=True))
+print(f"{len(shaping)} shaping coils per half period ({2 * NFP * len(shaping)} in all): {sizes}; "
+      f"current limits {'scale with the radius' if LIMIT_SCALES_WITH_RADIUS else 'are equal'}")
 print(f"  carrying the sheet: mean B.n {after.mean():.3%}, max {after.max():.3%}, max current {np.abs(handed).max():.2f}, rms {np.sqrt(np.mean(handed**2)):.2f} (of the mean encircling current)")
 results["shaping"] = dict(count=len(shaping), from_sheet=[float(after.mean()), float(after.max()), float(np.abs(handed).max())], bounded=[])
 for limit in CURRENT_LIMITS:
-    solution = lsq_linear(coil_matrix, r, bounds=(-limit, limit), max_iter=5000)
+    solution = lsq_linear(coil_matrix, r, bounds=(-limit * relative_size, limit * relative_size), max_iter=5000)
     after = np.abs(r - coil_matrix @ solution.x) / B_norm
     results["shaping"]["bounded"].append(dict(limit=float(limit), mean=float(after.mean()), max=float(after.max()),
-                                              at_limit=int(np.sum(np.abs(solution.x) > 0.999 * limit)),
+                                              at_limit=int(np.sum(np.abs(solution.x) > 0.999 * limit * relative_size)),
                                               rms=float(np.sqrt(np.mean(solution.x**2))), max_current=float(np.abs(solution.x).max())))
     print(f"  bounded fit, limit {limit:5.2f}: mean B.n {after.mean():.3%}, max {after.max():.3%}, "
           f"{results['shaping']['bounded'][-1]['at_limit']} at the limit, rms {results['shaping']['bounded'][-1]['rms']:.2f}, "

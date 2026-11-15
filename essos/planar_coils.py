@@ -216,12 +216,13 @@ def encircling_coils(boundary, nfp, n_coils, clearance, current, *, order=4, n_s
 
 
 def shaping_coils(boundary, nfp, offset, radius, spacing, current_scale, *, n_segments=16, n_phi=24, n_theta=120):
-    """Circles of one ``radius`` on the surface ``offset`` outside the boundary, facing the plasma.
+    """Circles on the surface ``offset`` outside the boundary, facing the plasma.
 
-    Candidate centres are a cell-centred ``n_phi`` by ``n_theta`` grid over a half field period. They are
-    taken in order and kept when the centre is at least ``2 radius + spacing`` from every centre already
-    kept and from all symmetric images, so neighbouring circles cannot touch. Currents start at zero and
-    are measured in units of ``current_scale`` ampere.
+    ``radius`` is one value or several: the sizes are placed in turn, largest first, so smaller coils fill
+    the gaps the larger ones leave. Candidate centres are a cell-centred ``n_phi`` by ``n_theta`` grid over
+    a half field period; a candidate is kept when its circle stays at least ``spacing`` from every circle
+    already kept and from all symmetric images. Currents start at zero and are measured in units of
+    ``current_scale`` ampere.
     """
     phi = (np.arange(n_phi) + 0.5) * np.pi / (nfp * n_phi)
     theta = (np.arange(n_theta) + 0.5) * 2 * np.pi / n_theta
@@ -229,17 +230,19 @@ def shaping_coils(boundary, nfp, offset, radius, spacing, current_scale, *, n_se
     candidates = np.swapaxes(points + offset * normals, 0, 1).reshape(-1, 3)        # plane by plane
     candidate_normals = np.swapaxes(normals, 0, 1).reshape(-1, 3)
     candidate_angles = np.stack(np.broadcast_arrays(theta[None, :], phi[:, None]), axis=-1).reshape(-1, 2)
-    pitch = 2 * radius + spacing
-    kept, images = [], np.zeros((0, 3))
-    for index, centre in enumerate(candidates):
-        own = np.asarray(apply_symmetries_to_gammas(jnp.asarray(centre)[None, None, :], nfp, True))[:, 0]
-        if np.min(np.linalg.norm(own[1:] - centre, axis=1)) < pitch:
-            continue
-        if images.shape[0] and np.min(np.linalg.norm(images - centre, axis=1)) < pitch:
-            continue
-        kept.append(index)
-        images = np.concatenate((images, own))
-    coils = PlanarCoils(candidates[kept], candidate_normals[kept], radius, current_scale, nfp=nfp, stellsym=True,
+    kept, radii, images, image_radii = [], [], np.zeros((0, 3)), np.zeros(0)
+    for size in sorted(np.atleast_1d(np.asarray(radius, dtype=float)), reverse=True):
+        for index, centre in enumerate(candidates):
+            own = np.asarray(apply_symmetries_to_gammas(jnp.asarray(centre)[None, None, :], nfp, True))[:, 0]
+            if np.min(np.linalg.norm(own[1:] - centre, axis=1)) < 2 * size + spacing:
+                continue
+            if images.shape[0] and np.min(np.linalg.norm(images - centre, axis=1) - image_radii) < size + spacing:
+                continue
+            kept.append(index)
+            radii.append(size)
+            images = np.concatenate((images, own))
+            image_radii = np.concatenate((image_radii, np.full(own.shape[0], size)))
+    coils = PlanarCoils(candidates[kept], candidate_normals[kept], np.array(radii), current_scale, nfp=nfp, stellsym=True,
                         n_segments=n_segments)
     coils._currents = np.zeros(len(coils))
     coils.theta, coils.phi = candidate_angles[kept].T                                # where each coil sits on the surface
