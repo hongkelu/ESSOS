@@ -65,6 +65,10 @@ JOINT_ITERATIONS = int(os.environ.get("JOINT_ITERATIONS", 2 * MAX_ITERATIONS))
 REACTOR_R, REACTOR_B = float(os.environ.get("REACTOR_R", 8.0)), float(os.environ.get("REACTOR_B", 6.0))
 FORCE_LIMIT = float(os.environ.get("FORCE_LIMIT", 53.0))               # MN/m at reactor size
 FORCE_WEIGHT = float(os.environ.get("FORCE_WEIGHT", 0.0))
+# Torque on a whole coil about its centre [MN m at reactor size, ~ B^2 L^3], shaping and encircling coils separately:
+TORQUE_LIMIT = float(os.environ.get("TORQUE_LIMIT", 40.0))
+ENCIRCLING_TORQUE_LIMIT = float(os.environ.get("ENCIRCLING_TORQUE_LIMIT", 1000.0))
+TORQUE_WEIGHT = float(os.environ.get("TORQUE_WEIGHT", 0.0))
 
 """ Field the coils must produce on the boundary """
 wout = read_wout(vmec_file)
@@ -261,6 +265,8 @@ def summary(label, p_enc, p_shp):
                # coil-on-coil loads at reactor size: MN/m, MN, MN m
                encircling_force_MN_m=float(jnp.max(jnp.linalg.norm(on_enc["force_per_length"], axis=-1)) * force_scale),
                shaping_force_MN_m=float(jnp.max(jnp.linalg.norm(on_shp["force_per_length"], axis=-1)) * force_scale),
+               encircling_net_force_MN=float(jnp.max(jnp.linalg.norm(on_enc["force"], axis=-1)) * force_scale * reactor_length),
+               encircling_torque_MN_m=float(jnp.max(jnp.linalg.norm(on_enc["torque"], axis=-1)) * force_scale * reactor_length**2),
                shaping_net_force_MN=float(jnp.max(jnp.linalg.norm(on_shp["force"], axis=-1)) * force_scale * reactor_length),
                shaping_torque_MN_m=float(jnp.max(jnp.linalg.norm(on_shp["torque"], axis=-1)) * force_scale * reactor_length**2))
     print(f"{label}: " + ", ".join(f"{k} {np.round(v, 4).tolist() if not isinstance(v, float) else round(v, 4)}" for k, v in row.items()),
@@ -314,13 +320,16 @@ def joint(x):
               + ((jnp.sum(p_enc["current"]) - total_current) / total_current) ** 2)
     peak = jnp.maximum(jnp.abs(error) / B_norm - PEAK_LIMIT, 0.0)
     value = jnp.mean(error * error) / field_scale + PEAK_WEIGHT * jnp.mean(peak * peak) + PENALTY_WEIGHT * limits
-    if FORCE_WEIGHT > 0:
+    if FORCE_WEIGHT > 0 or TORQUE_WEIGHT > 0:
         # the loads on the coils of one half period, from every coil
+        loads = coil_loads([(g_enc, encircling.expanded(p_enc)[1], encircling.expanded(p_enc)[2]),
+                            (g_shp, chosen.expanded(p_shp)[1], chosen.expanded(p_shp)[2])])
+        counts = (len(encircling), len(chosen))
         heavy = sum(jnp.mean(jnp.maximum(jnp.linalg.norm(load["force_per_length"][:n], axis=-1) * force_scale / FORCE_LIMIT - 1.0, 0.0) ** 2)
-                    for load, n in zip(coil_loads([(g_enc, encircling.expanded(p_enc)[1], encircling.expanded(p_enc)[2]),
-                                                   (g_shp, chosen.expanded(p_shp)[1], chosen.expanded(p_shp)[2])]),
-                                       (len(encircling), len(chosen))))
-        value = value + FORCE_WEIGHT * heavy
+                    for load, n in zip(loads, counts))
+        twist = sum(jnp.mean(jnp.maximum(jnp.sqrt(jnp.sum(load["torque"][:n] ** 2, axis=-1) + 1e-30) * force_scale * reactor_length**2 / limit - 1.0, 0.0) ** 2)
+                    for load, n, limit in zip(loads, counts, (ENCIRCLING_TORQUE_LIMIT, TORQUE_LIMIT)))
+        value = value + FORCE_WEIGHT * heavy + TORQUE_WEIGHT * twist
     return value
 
 
