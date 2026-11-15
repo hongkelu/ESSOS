@@ -35,8 +35,9 @@ NPHI, NTHETA, VC_DIGITS = 32, 32, 4
 N_ENCIRCLING = int(os.environ.get("N_ENCIRCLING", 3))                  # per half field period
 ENCIRCLING_ORDER = int(os.environ.get("ENCIRCLING_ORDER", 4))
 PLASMA_DISTANCE = float(os.environ.get("PLASMA_DISTANCE", 0.67))
-ENCIRCLING_DISTANCE = 0.67
-ENCIRCLING_SHAPING_DISTANCE = 0.34
+# Coil-coil distances between conductor centre lines, in minor radii (Helios-scaled defaults):
+ENCIRCLING_DISTANCE = float(os.environ.get("ENCIRCLING_DISTANCE", 0.67))                    # encircling - encircling
+ENCIRCLING_SHAPING_DISTANCE = float(os.environ.get("ENCIRCLING_SHAPING_DISTANCE", 0.34))    # encircling - shaping
 # In the joint refinement the encircling coils may come closer to the plasma than "behind the shaping coils" where no
 # shaping coil is in the way (their distance to every shaping coil is still enforced): a way to let them make the
 # high-field end of a mirror-type field themselves instead of a crowd of shaping coils.
