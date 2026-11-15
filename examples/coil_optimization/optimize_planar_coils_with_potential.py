@@ -40,6 +40,7 @@ ENCIRCLING_SHAPING_DISTANCE = 0.34
 SHAPING_DISTANCE = float(os.environ.get("SHAPING_DISTANCE", 0.08))
 SHAPING_RADIUS = float(os.environ.get("SHAPING_RADIUS", 0.2))
 CURVATURE_LIMIT = 2.67
+LENGTH_LIMIT = float(os.environ.get("LENGTH_LIMIT", 24.0))             # encircling-coil length (Helios: 20 minor radii)
 REGULARIZATION = float(os.environ.get("REGULARIZATION", 1e-13))        # T^2 / A^2
 PENALTY_WEIGHT = float(os.environ.get("PENALTY_WEIGHT", 1e-2))
 FREE = tuple(os.environ.get("FREE", "shift,tilt,size,shape,current").split(","))
@@ -128,6 +129,7 @@ def objective(x):
               + separation_loss(base, gamma[len(encircling):], ENCIRCLING_DISTANCE * minor)
               + separation_loss(base, base, ENCIRCLING_DISTANCE * minor, same=True)
               + separation_loss(base, surface_points, (PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE) * minor)
+              + jnp.mean(jnp.maximum(encircling.length(p) / (LENGTH_LIMIT * minor) - 1.0, 0.0) ** 2)
               + ((jnp.sum(p["current"]) - total_current) / total_current) ** 2)
     return r @ Q @ r / field_scale + PENALTY_WEIGHT * limits
 
