@@ -228,6 +228,7 @@ def shaping_coils(boundary, nfp, offset, radius, spacing, current_scale, *, n_se
     points, normals = boundary(theta[:, None], phi[None, :])
     candidates = np.swapaxes(points + offset * normals, 0, 1).reshape(-1, 3)        # plane by plane
     candidate_normals = np.swapaxes(normals, 0, 1).reshape(-1, 3)
+    candidate_angles = np.stack(np.broadcast_arrays(theta[None, :], phi[:, None]), axis=-1).reshape(-1, 2)
     pitch = 2 * radius + spacing
     kept, images = [], np.zeros((0, 3))
     for index, centre in enumerate(candidates):
@@ -241,4 +242,94 @@ def shaping_coils(boundary, nfp, offset, radius, spacing, current_scale, *, n_se
     coils = PlanarCoils(candidates[kept], candidate_normals[kept], radius, current_scale, nfp=nfp, stellsym=True,
                         n_segments=n_segments)
     coils._currents = np.zeros(len(coils))
+    coils.theta, coils.phi = candidate_angles[kept].T                                # where each coil sits on the surface
     return coils
+
+
+def dipole_field(points, positions, moments):
+    """Field at ``points`` (m, 3) of point dipoles at ``positions`` (n, 3) with ``moments`` (n, 3) in A m^2."""
+    def one(x):
+        r = x - positions
+        d = jnp.linalg.norm(r, axis=-1, keepdims=True)
+        return 1e-7 * jnp.sum(3 * jnp.sum(moments * r, axis=-1, keepdims=True) * r / d**5 - moments / d**3, axis=0)
+    return jax.vmap(one)(points)
+
+
+class CurrentPotential:
+    """A single-valued current potential on a winding surface, the continuous limit of a shaping-coil array.
+
+    Phi(theta, phi) = sum_mn c_mn sin(m theta - n nfp phi) [ampere] is a stellarator-symmetric sheet of
+    surface current n x grad(Phi), equivalent to a layer of magnetic dipoles of density Phi along the
+    surface normal. Its normal field on the plasma is linear in c, so the best sheet for a given
+    regularization is one linear solve; it bounds what any array of shaping coils on that surface can
+    do and tells how much current they need. ``surface(theta, phi)`` returns points and unit normals.
+    """
+
+    def __init__(self, surface, nfp, mpol, ntor, *, n_theta=64, n_phi=32):
+        self.nfp = int(nfp)
+        theta = (np.arange(n_theta) + 0.5) * 2 * np.pi / n_theta
+        phi = (np.arange(nfp * n_phi) + 0.5) * 2 * np.pi / (nfp * n_phi)             # the whole torus
+        points, normals = surface(theta[:, None], phi[None, :])
+        d_theta = (np.roll(points, -1, axis=0) - np.roll(points, 1, axis=0)) / 2
+        d_phi = (np.roll(points, -1, axis=1) - np.roll(points, 1, axis=1)) / 2
+        self.area = np.linalg.norm(np.cross(d_theta, d_phi), axis=-1).ravel()        # of each cell
+        self.points, self.normals = points.reshape(-1, 3), normals.reshape(-1, 3)
+        self.theta, self.phi = (v.ravel() for v in np.broadcast_arrays(theta[:, None], phi[None, :]))
+        self.modes = np.array([(m, n) for m in range(mpol + 1) for n in range(-ntor, ntor + 1) if m > 0 or n > 0])
+        self.basis = self._basis(self.theta, self.phi)
+
+    def _basis(self, theta, phi):
+        m, n = self.modes.T
+        return np.sin(np.asarray(theta)[..., None] * m - np.asarray(phi)[..., None] * n * self.nfp)
+
+    def normal_field_matrix(self, points, normals):
+        """Matrix from the coefficients to B.n at ``points`` with unit ``normals``."""
+        positions, moments = jnp.asarray(self.points), jnp.asarray(self.normals * self.area[:, None])
+
+        def row(x, normal):                                 # B.n at x of a unit dipole density in each cell
+            r = x - positions
+            d = jnp.linalg.norm(r, axis=-1)
+            return 1e-7 * (3 * jnp.sum(moments * r, axis=-1) * (r @ normal) / d**5 - (moments @ normal) / d**3)
+        return np.asarray(jax.vmap(row)(jnp.asarray(points), jnp.asarray(normals))) @ self.basis
+
+    def solve(self, matrix, target, regularization):
+        """Coefficients minimizing mean (B.n - target)^2 + regularization * surface mean of (Phi / Phi_0)^2.
+
+        Phi_0 = 1 A, so ``regularization`` has units T^2 / A^2; scan it to trade field error against
+        the size of the potential.
+        """
+        weight = np.sqrt(regularization * self.area / self.area.sum())[:, None] * self.basis
+        system = np.concatenate((matrix / np.sqrt(matrix.shape[0]), weight))
+        rhs = np.concatenate((np.asarray(target) / np.sqrt(matrix.shape[0]), np.zeros(weight.shape[0])))
+        return np.linalg.lstsq(system, rhs, rcond=None)[0]
+
+    def potential(self, coefficients, theta=None, phi=None):
+        """Phi on the surface grid, or at the given angles."""
+        basis = self.basis if theta is None else self._basis(theta, phi)
+        return basis @ np.asarray(coefficients)
+
+    def coil_currents(self, coefficients, coils):
+        """Currents of an array of shaping coils that carries the potential.
+
+        Each coil takes the dipole moment of the surface cells nearest to it (or to one of its symmetric
+        images, with the sign of the image) and turns it into a current through its own area.
+        """
+        centres = np.asarray(apply_symmetries_to_gammas(jnp.asarray(coils.centres)[:, None, :], coils.nfp,
+                                                        coils.stellsym))[:, 0]
+        owner = np.empty(self.points.shape[0], dtype=int)
+        for start in range(0, self.points.shape[0], 2048):  # nearest coil of each cell, in blocks
+            block = self.points[start:start + 2048]
+            owner[start:start + 2048] = np.argmin(np.linalg.norm(block[:, None] - centres[None], axis=-1), axis=1)
+        sign = np.asarray(apply_symmetries_to_currents(np.ones(len(coils)), coils.nfp, coils.stellsym))
+        moment = np.bincount(owner, weights=self.potential(coefficients) * self.area, minlength=centres.shape[0])
+        base = np.arange(centres.shape[0]) % len(coils)
+        moments = np.bincount(base, weights=moment * sign, minlength=len(coils)) / (centres.shape[0] // len(coils))
+        return moments / (np.pi * coils.radius**2)
+
+
+def offset_surface(boundary, offset):
+    """The surface ``offset`` outside a :class:`FourierBoundary`, with the boundary normals."""
+    def surface(theta, phi):
+        points, normals = boundary(theta, phi)
+        return points + offset * normals, normals
+    return surface

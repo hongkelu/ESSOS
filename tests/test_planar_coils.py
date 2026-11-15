@@ -135,3 +135,44 @@ def test_field_is_differentiable_in_every_variable():
     jacobian = jax.jacfwd(lambda q: coils.B(q, x))(p)
     for name, value in jacobian.items():
         assert np.all(np.isfinite(value)) and float(jnp.max(jnp.abs(value))) > 0, name
+
+
+def test_dipole_field_matches_a_small_current_loop():
+    from essos.planar_coils import dipole_field
+    loop = PlanarCoils([[0.1, -0.2, 0.3]], [[0.3, 0.4, np.sqrt(0.75)]], 1e-3, 2.0e4, n_segments=64)
+    p = loop.initial_parameters()
+    x = jnp.array([[0.6, 0.1, 0.2], [-0.3, 0.4, 0.9]])
+    moment = 2.0e4 * np.pi * 1e-6 * np.asarray(loop.normals(p))
+    np.testing.assert_allclose(dipole_field(x, jnp.asarray(loop.centres), jnp.asarray(moment)), loop.B(p, x), rtol=1e-4)
+
+
+def test_current_potential_reproduces_a_potential_and_hands_it_to_coils():
+    from essos.planar_coils import CurrentPotential, dipole_field, offset_surface
+    boundary = FourierBoundary([1.0, 0.2, 0.05], [0.0, 0.2, -0.05], [0, 1, 1], [0, 0, 2])
+    sheet = CurrentPotential(offset_surface(boundary, 0.15), 2, 3, 2, n_theta=48, n_phi=24)
+    theta = (np.arange(16)[:, None] + 0.5) * 2 * np.pi / 16
+    phi = (np.arange(8)[None, :] + 0.5) * np.pi / 16
+    points, normals = (v.reshape(-1, 3) for v in boundary(theta, phi))
+    matrix = sheet.normal_field_matrix(points, normals)
+    coefficients = np.zeros(len(sheet.modes))
+    coefficients[[3, 11]] = [4.0e4, -2.5e4]
+    # The matrix is the dipole layer of density Phi along the surface normal.
+    moments = (sheet.potential(coefficients) * sheet.area)[:, None] * sheet.normals
+    direct = np.sum(np.asarray(dipole_field(jnp.asarray(points), jnp.asarray(sheet.points), jnp.asarray(moments))) * normals, axis=1)
+    np.testing.assert_allclose(matrix @ coefficients, direct, rtol=1e-10, atol=1e-16)
+    # An unregularized solve of its own field returns the potential; regularization shrinks it.
+    np.testing.assert_allclose(sheet.solve(matrix, direct, 0.0), coefficients, rtol=1e-6, atol=1e-3)
+    assert np.linalg.norm(sheet.solve(matrix, direct, 1e-12)) < np.linalg.norm(coefficients)
+    # Stellarator symmetry: Phi is odd under (theta, phi) -> (-theta, -phi).
+    np.testing.assert_allclose(sheet.potential(coefficients, -theta, -phi), -sheet.potential(coefficients, theta, phi), atol=1e-9)
+    # Coils take the moment of their cells: the total moment along the normals is kept.
+    dipoles = shaping_coils(boundary, 2, 0.15, 0.03, 0.02, 1.0)
+    currents = sheet.coil_currents(coefficients, dipoles)
+    assert currents.shape == (len(dipoles),) and np.all(np.isfinite(currents)) and np.abs(currents).max() > 0
+    centres = np.asarray(dipoles.centres)
+    nearest = np.argmin(np.linalg.norm(sheet.points[:, None] - centres[None], axis=-1), axis=1)
+    inside = np.linalg.norm(sheet.points - centres[nearest], axis=1) < 0.02      # cells well inside one coil's patch
+    sample = np.bincount(nearest[inside], weights=sheet.potential(coefficients)[inside], minlength=len(dipoles)) / np.maximum(
+        np.bincount(nearest[inside], minlength=len(dipoles)), 1)
+    seen = np.bincount(nearest[inside], minlength=len(dipoles)) > 0
+    assert np.corrcoef(sample[seen], currents[seen])[0, 1] > 0.9                  # current follows the local potential
