@@ -52,8 +52,11 @@ MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 2000))
 CURRENT_LIMITS = (0.5, 1.0, 2.0, np.inf)                               # shaping current / mean encircling current
 # The goal is the shortest coil set with a small boundary error: shaping coils are removed, weakest first, at this
 # current limit, and the total coil length is reported against the error left:
-PRUNE_LIMIT = float(os.environ.get("PRUNE_LIMIT", 1.0))
+PRUNE_LIMIT = float(os.environ.get("PRUNE_LIMIT", 0.5))                # Helios's limit scales to 0.44-0.60
 PRUNE_FRACTION = 0.12
+# The most shaping coils that can be afforded, counted over the whole torus (Helios has 324). The set pruned to
+# this number is then refined: encircling coils re-optimized for these coils, then everything together.
+SHAPING_BUDGET = int(os.environ.get("SHAPING_BUDGET", 324))
 
 """ Field the coils must produce on the boundary """
 wout = read_wout(vmec_file)
@@ -180,6 +183,7 @@ encircling_length = n_copies * float(jnp.sum(encircling.length(parameters)))
 encircling_ampere_metres = n_copies * float(jnp.sum(jnp.abs(encircling.currents(parameters)) * encircling.length(parameters)))
 circumference = 2 * np.pi * shaping.radius
 active = np.arange(len(shaping))
+budget_size = min(len(shaping), SHAPING_BUDGET // n_copies)             # base coils within the budget
 results["pruning"] = dict(limit=PRUNE_LIMIT, encircling_length_m=encircling_length, rows=[])
 print(f"\nencircling coils: {n_copies * len(encircling)} coils, {encircling_length:.1f} m ({encircling_length / minor:.0f} a), "
       f"{encircling_ampere_metres / 1e6:.2f} MA m. Pruning the shaping coils at current limit {PRUNE_LIMIT}:")
@@ -196,16 +200,111 @@ while True:
     results["pruning"]["rows"].append(row)
     print(f"   {row['coils']:6d}            |   {shaping_length:8.1f}         |  {row['total_length_m']:7.1f} ({row['total_length_a']:5.0f})     |  {row['total_MA_m']:6.2f}   "
           f"| {row['mean']:7.3%} | {row['max']:7.3%} | {row['at_limit']}")
+    if n_copies * active.size == budget_size * n_copies:
+        budget_set, budget_currents = active.copy(), solution.x.copy()
     if active.size <= 4:
         break
     worth = np.abs(solution.x) * shaping.radius[active]                # moment per metre of conductor
-    active = active[np.sort(np.argsort(worth)[max(1, int(PRUNE_FRACTION * active.size)):])]
+    keep = active.size - max(1, int(PRUNE_FRACTION * active.size))
+    if active.size > budget_size > keep:
+        keep = budget_size                                             # land exactly on the budget
+    active = active[np.sort(np.argsort(worth)[active.size - keep:])]
 after = np.abs(r) / B_norm
 print(f"        0            |        0.0         |  {encircling_length:7.1f} ({encircling_length / minor:5.0f})     |  {encircling_ampere_metres / 1e6:6.2f}   | {after.mean():7.3%} | {after.max():7.3%} |")
+
+""" The budget set, refined """
+from essos.planar_coils import PlanarCoils  # noqa: E402
+
+chosen = PlanarCoils(shaping.centres[budget_set], shaping.frames[budget_set, 2], shaping.radius[budget_set], mean_current,
+                     nfp=NFP, stellsym=True, n_segments=shaping.n_segments)
+p_chosen = chosen.initial_parameters() | dict(current=jnp.asarray(budget_currents))
+chosen_size = relative_size[budget_set]
+C = coil_matrix[:, budget_set]
+
+
+def summary(label, p_enc, p_shp):
+    left_over = np.asarray(left(p_enc) - jnp.sum(chosen.B(p_shp, points) * normals, axis=1))
+    g_enc, _, _ = encircling.expanded(p_enc)
+    g_shp, _, _ = chosen.expanded(p_shp)
+    kappa = encircling.signed_curvature(p_enc)
+    length = n_copies * (float(jnp.sum(encircling.length(p_enc))) + float(np.sum(2 * np.pi * chosen.radius)))
+    row = dict(mean=float(np.mean(np.abs(left_over) / B_norm)), max=float(np.max(np.abs(left_over) / B_norm)),
+               total_length_m=length, shaping_current_max=float(jnp.max(jnp.abs(p_shp["current"]))),
+               curvature_a=[float(jnp.min(kappa) * minor), float(jnp.max(kappa) * minor)],
+               encircling_length_a=np.round(np.asarray(encircling.length(p_enc)) / minor, 1).tolist(),
+               encircling_currents=np.round(np.asarray(encircling.currents(p_enc)) / mean_current, 2).tolist(),
+               encircling_encircling_a=float(minimum_distance(g_enc, g_enc, same=True) / minor),
+               encircling_shaping_a=float(minimum_distance(g_enc, g_shp) / minor),
+               shaping_shaping_a=float(minimum_distance(g_shp, g_shp, same=True) / minor),
+               shaping_plasma_a=float(minimum_distance(g_shp, surface_points) / minor),
+               encircling_plasma_a=float(minimum_distance(g_enc, surface_points) / minor))
+    print(f"{label}: " + ", ".join(f"{k} {np.round(v, 4).tolist() if not isinstance(v, float) else round(v, 4)}" for k, v in row.items()),
+          flush=True)
+    return row
+
+
+print(f"\nBudget: {n_copies * len(chosen)} shaping coils ({len(chosen)} per half period), current limit {PRUNE_LIMIT}")
+results["budget"] = dict(count=n_copies * len(chosen), limit=PRUNE_LIMIT, pruned=summary("pruned", parameters, p_chosen))
+
+# Encircling coils re-optimized for these shaping coils: their currents are eliminated like the sheet was,
+# with the ridge that keeps the largest current near the limit at the start.
+for ridge in 10.0 ** np.arange(-8.0, 0.5, 0.5):
+    solve_coils = np.linalg.solve(C.T @ C / n_points + ridge * field_scale * np.eye(C.shape[1]), C.T / n_points)
+    if np.max(np.abs(solve_coils @ np.asarray(left(parameters))) / chosen_size) <= PRUNE_LIMIT:
+        break
+Q_coils = jnp.asarray((np.eye(n_points) - C @ solve_coils) / n_points)
+Q_sheet, Q = Q, Q_coils                                               # the objective above now sees the coils
+value_and_grad = jax.jit(jax.value_and_grad(objective))
+x0, unravel = ravel_pytree({k: parameters[k] for k in FREE})
+result = minimize(lambda x: tuple(np.asarray(v, dtype=float) for v in value_and_grad(jnp.asarray(x))), np.asarray(x0),
+                  jac=True, method="L-BFGS-B", options=dict(maxiter=MAX_ITERATIONS, maxcor=30, ftol=1e-15, gtol=1e-12))
+parameters = parameters | unravel(jnp.asarray(result.x))
+bound = PRUNE_LIMIT * chosen_size
+p_chosen = p_chosen | dict(current=jnp.asarray(lsq_linear(C, np.asarray(left(parameters)), bounds=(-bound, bound), max_iter=5000).x))
+results["budget"]["encircling_refit"] = summary(f"encircling coils refit (ridge {ridge:.0e})", parameters, p_chosen)
+
+# Everything together: encircling coils, and each shaping coil's position, tilt and current.
+free_all = dict(encircling={k: parameters[k] for k in FREE}, shaping={k: p_chosen[k] for k in ("shift", "tilt", "current")})
+x0, unravel = ravel_pytree(free_all)
+
+
+def joint(x):
+    moved = unravel(x)
+    p_enc, p_shp = parameters | moved["encircling"], p_chosen | moved["shaping"]
+    error = (left(p_enc) - jnp.sum(chosen.B(p_shp, points) * normals, axis=1))
+    g_enc, _, _ = encircling.expanded(p_enc)
+    g_shp, _, _ = chosen.expanded(p_shp)
+    base_enc, base_shp = encircling.gamma(p_enc), chosen.gamma(p_shp)
+    over = jnp.maximum(jnp.abs(p_shp["current"]) / jnp.asarray(bound) - 1.0, 0.0)
+    limits = (convexity_loss(encircling.signed_curvature(p_enc), CURVATURE_LIMIT / minor)
+              + separation_loss(base_enc, g_enc[len(encircling):], ENCIRCLING_DISTANCE * minor)
+              + separation_loss(base_enc, base_enc, ENCIRCLING_DISTANCE * minor, same=True)
+              + separation_loss(base_enc, surface_points, (PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE) * minor)
+              + separation_loss(base_enc, g_shp, ENCIRCLING_SHAPING_DISTANCE * minor)
+              + separation_loss(base_shp, g_shp[len(chosen):], SHAPING_DISTANCE * minor)
+              + separation_loss(base_shp, base_shp, SHAPING_DISTANCE * minor, same=True)
+              + separation_loss(base_shp, surface_points, PLASMA_DISTANCE * minor)
+              + jnp.mean(jnp.maximum(encircling.length(p_enc) / (LENGTH_LIMIT * minor) - 1.0, 0.0) ** 2)
+              + jnp.mean(over * over)
+              + ((jnp.sum(p_enc["current"]) - total_current) / total_current) ** 2)
+    return jnp.mean(error * error) / field_scale + PENALTY_WEIGHT * limits
+
+
+joint_value_and_grad = jax.jit(jax.value_and_grad(joint))
+t_start = time()
+result = minimize(lambda x: tuple(np.asarray(v, dtype=float) for v in joint_value_and_grad(jnp.asarray(x))), np.asarray(x0),
+                  jac=True, method="L-BFGS-B", options=dict(maxiter=2 * MAX_ITERATIONS, maxcor=30, ftol=1e-15, gtol=1e-12))
+moved = unravel(jnp.asarray(result.x))
+parameters, p_chosen = parameters | moved["encircling"], p_chosen | moved["shaping"]
+print(f"joint refinement took {time() - t_start:.1f} s, {result.nit} iterations")
+results["budget"]["joint"] = summary("joint", parameters, p_chosen)
+shaping_gamma, shaping_gamma_dash, shaping_currents = chosen.expanded(p_chosen)
 
 gamma, gamma_dash, currents = encircling.expanded(parameters)
 np.savez(f"{OUTPUT}.npz", encircling_gamma=gamma, encircling_gamma_dash=gamma_dash, encircling_currents=currents,
          potential=sheet.potential(coefficients), sheet_points=sheet.points, coefficients=coefficients, modes=sheet.modes,
+         shaping_gamma=shaping_gamma, shaping_gamma_dash=shaping_gamma_dash, shaping_currents=shaping_currents,
+         points=points, normals=normals,
          **{f"encircling_{k}": np.asarray(v) for k, v in parameters.items()})
 with open(f"{OUTPUT}.json", "w") as stream:
     json.dump(results, stream, indent=1)
