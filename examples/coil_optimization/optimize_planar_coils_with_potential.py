@@ -57,6 +57,9 @@ PRUNE_FRACTION = 0.12
 # The most shaping coils that can be afforded, counted over the whole torus (Helios has 324). The set pruned to
 # this number is then refined: encircling coils re-optimized for these coils, then everything together.
 SHAPING_BUDGET = int(os.environ.get("SHAPING_BUDGET", 324))
+PEAK_LIMIT = float(os.environ.get("PEAK_LIMIT", 0.008))                # local B.n / B the joint refinement pushes below
+PEAK_WEIGHT = float(os.environ.get("PEAK_WEIGHT", 0.0))
+JOINT_ITERATIONS = int(os.environ.get("JOINT_ITERATIONS", 2 * MAX_ITERATIONS))
 
 """ Field the coils must produce on the boundary """
 wout = read_wout(vmec_file)
@@ -287,13 +290,14 @@ def joint(x):
               + jnp.mean(jnp.maximum(encircling.length(p_enc) / (LENGTH_LIMIT * minor) - 1.0, 0.0) ** 2)
               + jnp.mean(over * over)
               + ((jnp.sum(p_enc["current"]) - total_current) / total_current) ** 2)
-    return jnp.mean(error * error) / field_scale + PENALTY_WEIGHT * limits
+    peak = jnp.maximum(jnp.abs(error) / B_norm - PEAK_LIMIT, 0.0)
+    return jnp.mean(error * error) / field_scale + PEAK_WEIGHT * jnp.mean(peak * peak) + PENALTY_WEIGHT * limits
 
 
 joint_value_and_grad = jax.jit(jax.value_and_grad(joint))
 t_start = time()
 result = minimize(lambda x: tuple(np.asarray(v, dtype=float) for v in joint_value_and_grad(jnp.asarray(x))), np.asarray(x0),
-                  jac=True, method="L-BFGS-B", options=dict(maxiter=2 * MAX_ITERATIONS, maxcor=30, ftol=1e-15, gtol=1e-12))
+                  jac=True, method="L-BFGS-B", options=dict(maxiter=JOINT_ITERATIONS, maxcor=30, ftol=1e-15, gtol=1e-12))
 moved = unravel(jnp.asarray(result.x))
 parameters, p_chosen = parameters | moved["encircling"], p_chosen | moved["shaping"]
 print(f"joint refinement took {time() - t_start:.1f} s, {result.nit} iterations")
