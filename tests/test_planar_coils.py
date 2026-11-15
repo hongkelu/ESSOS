@@ -217,6 +217,7 @@ def test_planar_coil_set_cost_vanishes_for_its_own_circles_and_sees_shaping():
     shaped = field + 0.05 * np.abs(field).max() * np.cos(4 * np.arctan2(points[..., 1], points[..., 0]))[..., None] * np.array([0.0, 0.0, 1.0])
     harder = planar_coil_set_cost(jnp.asarray(gamma), jnp.asarray(normal), jnp.asarray(np.moveaxis(shaped, -1, 0)), 2, **options)
     assert float(harder["cost"]) > 100 * float(own["cost"]) and float(harder["potential_rms"]) > 1e-3
+    assert float(jnp.sum(harder["residuals"] ** 2)) == pytest.approx(float(harder["cost"]), rel=1e-6)
 
 
 def test_planar_coil_set_cost_gradient_matches_finite_differences():

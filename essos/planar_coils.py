@@ -398,7 +398,7 @@ def planar_coil_set_cost(gamma, normal, B, nfp, *, n_encircling, sheet_distance,
         cost = mean |B_coils - B|^2 / |B|^2  +  regularization * mean (Phi / I0)^2 ,
 
     I0 being the mean encircling-coil current the poloidal flux function of ``B`` asks for. Returns the
-    cost and its parts: ``field_error`` (rms |dB|/|B|), ``potential_rms`` (in units of I0), ``currents``.
+    cost, ``residuals`` whose sum of squares is the cost, and its parts: ``field_error`` (rms |dB|/|B|), ``potential_rms`` (in units of I0), ``currents``.
     """
     points = jnp.moveaxis(gamma, 0, -1)                                             # (nphi, ntheta, 3)
     normals = jnp.moveaxis(normal, 0, -1)
@@ -464,6 +464,9 @@ def planar_coil_set_cost(gamma, normal, B, nfp, *, n_encircling, sheet_distance,
     misfit = fit_rows @ solution - rhs[:3 * n_points]
     potential = basis @ solution[:n_modes]
     potential_mean_square = jnp.sum(potential**2 * area) / jnp.sum(area)
+    # The same cost as a sum of squares, for least-squares optimizers: the field misfit and the potential in its modes.
+    smooth = jnp.linalg.cholesky(smooth_rows[:, :n_modes].T @ smooth_rows[:, :n_modes] + 1e-14 * jnp.eye(n_modes)).T
     return dict(cost=jnp.sum(misfit**2) + regularization * potential_mean_square,
+                residuals=jnp.concatenate((misfit, smooth @ solution[:n_modes])),
                 field_error=jnp.sqrt(jnp.sum(misfit**2)), potential_rms=jnp.sqrt(potential_mean_square),
                 currents=solution[n_modes:], unit_current=unit_current, radii=radii)
