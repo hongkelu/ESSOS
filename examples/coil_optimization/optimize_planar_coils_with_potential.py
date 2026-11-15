@@ -50,6 +50,10 @@ PENALTY_WEIGHT = float(os.environ.get("PENALTY_WEIGHT", 1e-2))
 FREE = tuple(os.environ.get("FREE", "shift,tilt,size,shape,current").split(","))
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 2000))
 CURRENT_LIMITS = (0.5, 1.0, 2.0, np.inf)                               # shaping current / mean encircling current
+# The goal is the shortest coil set with a small boundary error: shaping coils are removed, weakest first, at this
+# current limit, and the total coil length is reported against the error left:
+PRUNE_LIMIT = float(os.environ.get("PRUNE_LIMIT", 1.0))
+PRUNE_FRACTION = 0.12
 
 """ Field the coils must produce on the boundary """
 wout = read_wout(vmec_file)
@@ -169,6 +173,35 @@ for limit in CURRENT_LIMITS:
     print(f"  bounded fit, limit {limit:5.2f}: mean B.n {after.mean():.3%}, max {after.max():.3%}, "
           f"{results['shaping']['bounded'][-1]['at_limit']} at the limit, rms {results['shaping']['bounded'][-1]['rms']:.2f}, "
           f"max {results['shaping']['bounded'][-1]['max_current']:.2f}")
+
+""" Shortest coil set: drop the shaping coils that do the least per metre of conductor, and refit the rest """
+n_copies = 2 * NFP                                                     # each base coil stands for this many coils
+encircling_length = n_copies * float(jnp.sum(encircling.length(parameters)))
+encircling_ampere_metres = n_copies * float(jnp.sum(jnp.abs(encircling.currents(parameters)) * encircling.length(parameters)))
+circumference = 2 * np.pi * shaping.radius
+active = np.arange(len(shaping))
+results["pruning"] = dict(limit=PRUNE_LIMIT, encircling_length_m=encircling_length, rows=[])
+print(f"\nencircling coils: {n_copies * len(encircling)} coils, {encircling_length:.1f} m ({encircling_length / minor:.0f} a), "
+      f"{encircling_ampere_metres / 1e6:.2f} MA m. Pruning the shaping coils at current limit {PRUNE_LIMIT}:")
+print(" shaping coils (all) | shaping length [m] | total length [m] ([a]) | total MA m | mean B.n | max B.n | at limit")
+while True:
+    bound = PRUNE_LIMIT * relative_size[active]
+    solution = lsq_linear(coil_matrix[:, active], r, bounds=(-bound, bound), max_iter=5000)
+    after = np.abs(r - coil_matrix[:, active] @ solution.x) / B_norm
+    shaping_length = n_copies * float(np.sum(circumference[active]))
+    ampere_metres = encircling_ampere_metres + n_copies * float(np.sum(np.abs(solution.x) * mean_current * circumference[active]))
+    row = dict(coils=int(n_copies * active.size), shaping_length_m=shaping_length, total_length_m=encircling_length + shaping_length,
+               total_length_a=(encircling_length + shaping_length) / minor, total_MA_m=ampere_metres / 1e6,
+               mean=float(after.mean()), max=float(after.max()), at_limit=int(np.sum(np.abs(solution.x) > 0.999 * bound)))
+    results["pruning"]["rows"].append(row)
+    print(f"   {row['coils']:6d}            |   {shaping_length:8.1f}         |  {row['total_length_m']:7.1f} ({row['total_length_a']:5.0f})     |  {row['total_MA_m']:6.2f}   "
+          f"| {row['mean']:7.3%} | {row['max']:7.3%} | {row['at_limit']}")
+    if active.size <= 4:
+        break
+    worth = np.abs(solution.x) * shaping.radius[active]                # moment per metre of conductor
+    active = active[np.sort(np.argsort(worth)[max(1, int(PRUNE_FRACTION * active.size)):])]
+after = np.abs(r) / B_norm
+print(f"        0            |        0.0         |  {encircling_length:7.1f} ({encircling_length / minor:5.0f})     |  {encircling_ampere_metres / 1e6:6.2f}   | {after.mean():7.3%} | {after.max():7.3%} |")
 
 gamma, gamma_dash, currents = encircling.expanded(parameters)
 np.savez(f"{OUTPUT}.npz", encircling_gamma=gamma, encircling_gamma_dash=gamma_dash, encircling_currents=currents,
