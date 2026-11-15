@@ -143,7 +143,12 @@ matrix = np.asarray(jax.jacfwd(lambda c: field_error(with_currents(c)).ravel())(
 target = np.asarray((B_target / B_norm[:, None]).ravel())
 limit = SHAPING_CURRENT_LIMIT * abs(sign)
 lower = np.concatenate((np.full(len(encircling), -np.inf), np.full(len(shaping), -limit)))
-solution = lsq_linear(matrix, target, bounds=(lower, -lower))
+c0 = np.asarray(currents_of(parameters))
+print(f"linear model check: |M c0 - t| {np.linalg.norm(matrix @ c0 - target):.6e}, direct "
+      f"{float(jnp.linalg.norm(field_error(parameters))):.6e}; matrix {matrix.shape}, column norms encircling "
+      f"{np.linalg.norm(matrix[:, :len(encircling)], axis=0)}, shaping mean {np.linalg.norm(matrix[:, len(encircling):], axis=0).mean():.3e}")
+solution = lsq_linear(matrix, target, bounds=(lower, -lower), max_iter=2000, verbose=1)
+print(f"lsq_linear status {solution.status}, iterations {solution.nit}, |M c - t| {np.linalg.norm(matrix @ solution.x - target):.6e}")
 parameters = with_currents(jnp.asarray(solution.x))
 print(f"step 1 took {time() - t_start:.1f} s; {int(np.sum(np.abs(solution.x[len(encircling):]) > 0.999 * limit))} "
       f"of {len(shaping)} shaping currents at the limit")
