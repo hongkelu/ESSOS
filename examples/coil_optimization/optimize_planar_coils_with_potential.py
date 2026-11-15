@@ -100,7 +100,7 @@ toroidal = jnp.stack((-points[:, 1] / major, points[:, 0] / major, 0 * major), a
 linked = float(jnp.mean(major * jnp.sum(B_target * toroidal, axis=1)))             # for the sign, and a rough check
 sign = np.sign(linked * float(jnp.mean(major * jnp.sum(encircling.B(parameters, points) * toroidal, axis=1))))
 needed = 2 * np.pi * abs(float(wout.rbtor)) / (4e-7 * np.pi) / (2 * NFP)             # per half field period
-parameters["current"] = parameters["current"] * sign * needed / abs(float(jnp.sum(parameters["current"])))
+parameters["current"] = parameters["current"] * sign * needed / abs(float(jnp.sum(encircling.currents(parameters))))
 print(f"linked current {2 * NFP * needed / 1e6:.4f} MA (R B_toroidal at the edge {float(wout.rbtor):.4f} T m; boundary average of the external field {linked:.4f})")
 total_current = float(jnp.sum(parameters["current"]))
 mean_current = abs(float(jnp.mean(encircling.currents(parameters))))
@@ -248,7 +248,7 @@ def summary(label, p_enc, p_shp):
     on_enc, on_shp = coil_loads([encircling.expanded(p_enc), chosen.expanded(p_shp)])
     length = n_copies * (float(jnp.sum(encircling.length(p_enc))) + float(np.sum(2 * np.pi * chosen.radius)))
     row = dict(mean=float(np.mean(np.abs(left_over) / B_norm)), max=float(np.max(np.abs(left_over) / B_norm)),
-               linked_current_ratio=float(jnp.sum(jnp.abs(p_enc["current"])) / needed),
+               linked_current_ratio=float(jnp.abs(jnp.sum(encircling.currents(p_enc))) / needed),
                total_length_m=length, shaping_current_max=float(jnp.max(jnp.abs(p_shp["current"]))),
                curvature_a=[float(jnp.min(kappa) * minor), float(jnp.max(kappa) * minor)],
                encircling_length_a=np.round(np.asarray(encircling.length(p_enc)) / minor, 1).tolist(),
