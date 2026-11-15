@@ -183,3 +183,55 @@ def test_shaping_coils_of_several_sizes_fill_the_gaps_without_touching():
     radii = np.tile(mixed.radius, 4)
     gap = np.linalg.norm(centres[:, None] - centres[None], axis=-1) - radii[:, None] - radii[None] + 10 * np.eye(len(centres))
     assert gap.min() >= 0.02 - 1e-12
+
+
+def _traced_boundary(shift=0.0, nphi=16, ntheta=16):
+    """Boundary points, normals and the field of four circular coils per period, on a vmex-style grid."""
+    boundary = FourierBoundary([1.0, 0.15 + shift, 0.03], [0.0, 0.15 + shift, -0.03], [0, 1, 1], [0, 0, 2])
+    theta = 2 * np.pi * np.arange(ntheta)[None, :] / ntheta
+    phi = np.pi * np.arange(nphi)[:, None] / nphi                                    # one period of nfp = 2
+    points = np.stack([boundary(theta[0][:, None], np.full((1, 1), p))[0][:, 0] for p in phi[:, 0]])
+    normals = np.stack([boundary(theta[0][:, None], np.full((1, 1), p))[1][:, 0] for p in phi[:, 0]])
+    return np.moveaxis(points, -1, 0), np.moveaxis(normals, -1, 0)
+
+
+def test_planar_coil_set_cost_vanishes_for_its_own_circles_and_sees_shaping():
+    from essos.planar_coils import planar_coil_set_cost
+    gamma, normal = _traced_boundary()
+    options = dict(n_encircling=2, sheet_distance=0.12, encircling_clearance=0.25, mpol=3, ntor=3, n_segments=64)
+    # The field of the very circles the cost builds, with currents 2 : 1.
+    probe = planar_coil_set_cost(jnp.asarray(gamma), jnp.asarray(normal), jnp.ones_like(jnp.asarray(gamma)), 2, **options)
+    radii = np.asarray(probe["radii"])
+    points = np.moveaxis(gamma, 0, -1)
+    planes = [2, 6]
+    centres = points[planes].mean(axis=1)
+    angle = np.pi * np.array(planes) / 16
+    normals_tf = np.stack((-np.sin(angle), np.cos(angle), 0 * angle), axis=1)
+    tf = PlanarCoils(centres, normals_tf, radii, [2.0e5, 1.0e5], nfp=2, stellsym=True, n_segments=64)
+    field = np.asarray(tf.B(tf.initial_parameters(), jnp.asarray(points.reshape(-1, 3)))).reshape(points.shape)
+    own = planar_coil_set_cost(jnp.asarray(gamma), jnp.asarray(normal), jnp.asarray(np.moveaxis(field, -1, 0)), 2, **options)
+    assert float(own["field_error"]) < 1e-6 and float(own["potential_rms"]) < 1e-4
+    ratio = np.asarray(own["currents"])
+    assert abs(ratio[0] / ratio[1]) == pytest.approx(2.0, rel=1e-4)
+    # A field the circles cannot make needs the sheet and costs more.
+    shaped = field + 0.05 * np.abs(field).max() * np.cos(4 * np.arctan2(points[..., 1], points[..., 0]))[..., None] * np.array([0.0, 0.0, 1.0])
+    harder = planar_coil_set_cost(jnp.asarray(gamma), jnp.asarray(normal), jnp.asarray(np.moveaxis(shaped, -1, 0)), 2, **options)
+    assert float(harder["cost"]) > 100 * float(own["cost"]) and float(harder["potential_rms"]) > 1e-3
+
+
+def test_planar_coil_set_cost_gradient_matches_finite_differences():
+    from essos.planar_coils import planar_coil_set_cost
+    gamma, normal = _traced_boundary()
+    moved, _ = _traced_boundary(shift=1e-5)
+    direction = jnp.asarray((moved - gamma) / 1e-5)
+    rng = np.random.default_rng(1)
+    B = jnp.asarray(np.stack((-gamma[1], gamma[0], 0.2 * rng.standard_normal(gamma[0].shape))) / (gamma[0]**2 + gamma[1]**2))
+
+    def cost(g):
+        return planar_coil_set_cost(g, jnp.asarray(normal), B, 2, n_encircling=2, sheet_distance=0.12,
+                                    encircling_clearance=0.25, mpol=3, ntor=3, n_segments=48)["cost"]
+    g0 = jnp.asarray(gamma)
+    gradient = jax.grad(cost)(g0)
+    step = 1e-5
+    finite = (cost(g0 + step * direction) - cost(g0 - step * direction)) / (2 * step)
+    assert float(jnp.vdot(gradient, direction)) == pytest.approx(float(finite), rel=1e-4)

@@ -336,3 +336,107 @@ def offset_surface(boundary, offset):
         points, normals = boundary(theta, phi)
         return points + offset * normals, normals
     return surface
+
+
+def _symmetric_copies(gamma, gamma_dash, nfp):
+    """A base coil and its field-period and stellarator-symmetric images: points, derivatives, current signs."""
+    flip = jnp.array([1.0, -1.0, -1.0])
+    points, derivatives, signs = [], [], []
+    for k in range(nfp):
+        angle = 2 * jnp.pi * k / nfp
+        rotation = jnp.array([[jnp.cos(angle), -jnp.sin(angle), 0.0], [jnp.sin(angle), jnp.cos(angle), 0.0], [0.0, 0.0, 1.0]])
+        for mirrored in (False, True):
+            g, d = (gamma * flip, gamma_dash * flip) if mirrored else (gamma, gamma_dash)
+            points.append(g @ rotation.T)
+            derivatives.append(d @ rotation.T)
+            signs.append(-1.0 if mirrored else 1.0)
+    return jnp.stack(points), jnp.stack(derivatives), jnp.array(signs)
+
+
+def planar_coil_set_cost(gamma, normal, B, nfp, *, n_encircling, sheet_distance, encircling_clearance,
+                         mpol=8, ntor=8, regularization=2.5e-3, n_segments=64):
+    """How well circular encircling coils plus a current sheet can make the field ``B`` on a boundary.
+
+    A differentiable measure of how hard a plasma is for planar encircling coils with an array of shaping
+    coils, for use inside a plasma optimization (the boundary may be traced). ``gamma``, ``normal`` and
+    ``B`` are (3, nphi, ntheta) on one field period of a stellarator-symmetric boundary, on uniform grids
+    that start at zero angle. The coil set follows the boundary:
+
+    * ``n_encircling`` circles per half field period in poloidal planes, each centred on its cross-section
+      and clearing it by ``encircling_clearance``; their currents are free;
+    * a single-valued current potential (dipole layer) on the surface ``sheet_distance`` outside the boundary.
+
+    The currents and the potential are eliminated by one linear solve of
+
+        cost = mean |B_coils - B|^2 / |B|^2  +  regularization * mean (Phi / I0)^2 ,
+
+    I0 being the mean encircling-coil current the poloidal flux function of ``B`` asks for. Returns the
+    cost and its parts: ``field_error`` (rms |dB|/|B|), ``potential_rms`` (in units of I0), ``currents``.
+    """
+    points = jnp.moveaxis(gamma, 0, -1)                                             # (nphi, ntheta, 3)
+    normals = jnp.moveaxis(normal, 0, -1)
+    normals = normals / jnp.linalg.norm(normals, axis=-1, keepdims=True)
+    field = jnp.moveaxis(B, 0, -1)
+    nphi, ntheta = points.shape[:2]
+
+    def turned(v, k):                                                               # rotate by k field periods
+        angle = 2 * jnp.pi * k / nfp
+        rotation = jnp.array([[jnp.cos(angle), -jnp.sin(angle), 0.0], [jnp.sin(angle), jnp.cos(angle), 0.0], [0.0, 0.0, 1.0]])
+        return v @ rotation.T
+    torus = jnp.concatenate([turned(points, k) for k in range(nfp)])                # (nfp nphi, ntheta, 3)
+    torus_normals = jnp.concatenate([turned(normals, k) for k in range(nfp)])
+
+    # The sheet: a dipole layer of density Phi along the boundary normal, on the offset surface.
+    sheet = torus + sheet_distance * torus_normals
+    d_phi = (jnp.roll(sheet, -1, axis=0) - jnp.roll(sheet, 1, axis=0)) / 2
+    d_theta = (jnp.roll(sheet, -1, axis=1) - jnp.roll(sheet, 1, axis=1)) / 2
+    area = jnp.linalg.norm(jnp.cross(d_phi, d_theta), axis=-1).reshape(-1)
+    positions, moments = sheet.reshape(-1, 3), torus_normals.reshape(-1, 3) * area[:, None]
+    phi = 2 * np.pi * np.arange(nfp * nphi) / (nfp * nphi)
+    theta = 2 * np.pi * np.arange(ntheta) / ntheta
+    modes = np.array([(m, n) for m in range(mpol + 1) for n in range(-ntor, ntor + 1) if m > 0 or n > 0])
+    basis = jnp.asarray(np.sin(theta[None, :, None] * modes[:, 0] - phi[:, None, None] * modes[:, 1] * nfp).reshape(-1, len(modes)))
+
+    half = slice(0, nphi // 2)                                                      # stellarator symmetry
+    targets = points[half].reshape(-1, 3)
+    wanted = field[half].reshape(-1, 3)
+    strength = jnp.linalg.norm(wanted, axis=-1)
+
+    def dipole_rows(x):                                                             # field at x of unit density in each cell
+        r = x - positions
+        d = jnp.linalg.norm(r, axis=-1, keepdims=True)
+        return 1e-7 * (3 * jnp.sum(moments * r, axis=-1, keepdims=True) * r / d**5 - moments / d**3)
+    sheet_matrix = jnp.einsum("pck,cm->pkm", jax.vmap(dipole_rows)(targets), basis)   # (points, 3, modes)
+
+    # Encircling circles around the cross-sections nearest to equally spaced planes of the half period.
+    planes = np.rint((np.arange(n_encircling) + 0.5) * nphi / (2 * n_encircling)).astype(int)
+    t = 2 * np.pi * np.arange(n_segments) / n_segments
+    radial = np.stack((np.cos(2 * np.pi * planes / (nfp * nphi)), np.sin(2 * np.pi * planes / (nfp * nphi)), 0 * planes), axis=1)
+    centres = jnp.mean(points[planes], axis=1)
+    radii = jnp.max(jnp.linalg.norm(points[planes] - centres[:, None], axis=-1), axis=1) + encircling_clearance
+    in_plane = (jnp.cos(t)[None, :, None] * jnp.asarray(radial)[:, None] + jnp.sin(t)[None, :, None] * jnp.array([0.0, 0.0, 1.0]))
+    tangent = (-jnp.sin(t)[None, :, None] * jnp.asarray(radial)[:, None] + jnp.cos(t)[None, :, None] * jnp.array([0.0, 0.0, 1.0]))
+    circles = centres[:, None] + radii[:, None, None] * in_plane                     # (coils, segments, 3)
+    circle_dash = 2 * jnp.pi * radii[:, None, None] * tangent
+
+    def coil_column(g, d):                                                          # field per ampere of a coil and its images
+        copies, derivatives, signs = _symmetric_copies(g, d, nfp)
+        return biot_savart(targets, copies, derivatives, signs)
+    coil_matrix = jnp.moveaxis(jax.vmap(coil_column)(circles, circle_dash), 0, -1)    # (points, 3, coils)
+
+    radius = jnp.linalg.norm(targets[:, :2], axis=-1)
+    unit_current = 2 * jnp.pi * jnp.mean(radius * strength) / (4e-7 * jnp.pi) / (2 * nfp * n_encircling)   # I0
+    n_points, n_modes = targets.shape[0], len(modes)
+    scale = 1.0 / (strength[:, None, None] * jnp.sqrt(n_points))
+    fit_rows = (jnp.concatenate((sheet_matrix, coil_matrix), axis=-1) * unit_current * scale).reshape(3 * n_points, -1)
+    smooth_rows = jnp.concatenate((jnp.sqrt(regularization * area / jnp.sum(area))[:, None] * basis,
+                                   jnp.zeros((basis.shape[0], n_encircling))), axis=1)
+    system = jnp.concatenate((fit_rows, smooth_rows))
+    rhs = jnp.concatenate(((wanted * scale[:, :, 0]).reshape(-1), jnp.zeros(basis.shape[0])))
+    solution = jnp.linalg.solve(system.T @ system + 1e-12 * jnp.eye(system.shape[1]), system.T @ rhs)
+    misfit = fit_rows @ solution - rhs[:3 * n_points]
+    potential = basis @ solution[:n_modes]
+    potential_mean_square = jnp.sum(potential**2 * area) / jnp.sum(area)
+    return dict(cost=jnp.sum(misfit**2) + regularization * potential_mean_square,
+                field_error=jnp.sqrt(jnp.sum(misfit**2)), potential_rms=jnp.sqrt(potential_mean_square),
+                currents=solution[n_modes:], unit_current=unit_current, radii=radii)
