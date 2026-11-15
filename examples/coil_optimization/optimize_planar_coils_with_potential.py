@@ -20,7 +20,7 @@ from virtual_casing_jax import VirtualCasingJAX
 from vmex.core.virtual_casing import surface_field_data_from_wout
 from vmex.core.wout import read_wout
 
-from essos.planar_coils import (CurrentPotential, FourierBoundary, convexity_loss, encircling_coils, minimum_distance,
+from essos.planar_coils import (CurrentPotential, FourierBoundary, coil_loads, convexity_loss, encircling_coils, minimum_distance,
                                 offset_surface, separation_loss, shaping_coils)
 
 jax.config.update("jax_enable_x64", True)
@@ -60,6 +60,11 @@ SHAPING_BUDGET = int(os.environ.get("SHAPING_BUDGET", 324))
 PEAK_LIMIT = float(os.environ.get("PEAK_LIMIT", 0.008))                # local B.n / B the joint refinement pushes below
 PEAK_WEIGHT = float(os.environ.get("PEAK_WEIGHT", 0.0))
 JOINT_ITERATIONS = int(os.environ.get("JOINT_ITERATIONS", 2 * MAX_ITERATIONS))
+# Coil-on-coil force per length, quoted for a reactor of major radius REACTOR_R [m] and volume-averaged field REACTOR_B [T]
+# (force per length ~ B^2 L). 53 MN/m is the limit of Gil et al. (185 kN/m at 1 m, 1 T) at 8 m, 6 T.
+REACTOR_R, REACTOR_B = float(os.environ.get("REACTOR_R", 8.0)), float(os.environ.get("REACTOR_B", 6.0))
+FORCE_LIMIT = float(os.environ.get("FORCE_LIMIT", 53.0))               # MN/m at reactor size
+FORCE_WEIGHT = float(os.environ.get("FORCE_WEIGHT", 0.0))
 
 """ Field the coils must produce on the boundary """
 wout = read_wout(vmec_file)
@@ -76,6 +81,8 @@ normals = jnp.moveaxis(data.normal, 0, -1)[half].reshape(-1, 3)
 normals = normals / jnp.linalg.norm(normals, axis=1, keepdims=True)
 B_norm = np.asarray(jnp.linalg.norm(B_total, axis=1))
 normal_goal = jnp.sum(B_target * normals, axis=1)
+reactor_length, reactor_field = REACTOR_R / float(wout.Rmajor_p), REACTOR_B / float(wout.volavgB)
+force_scale = reactor_field**2 * reactor_length / 1e6                  # N/m here -> MN/m at reactor size
 print(f"NFP {NFP}, minor radius {minor:.4f} m, aspect {float(wout.aspect):.2f}, beta {float(wout.betatotal):.3%}")
 
 """ Encircling coils and the sheet """
@@ -230,6 +237,7 @@ def summary(label, p_enc, p_shp):
     g_enc, _, _ = encircling.expanded(p_enc)
     g_shp, _, _ = chosen.expanded(p_shp)
     kappa = encircling.signed_curvature(p_enc)
+    on_enc, on_shp = coil_loads([encircling.expanded(p_enc), chosen.expanded(p_shp)])
     length = n_copies * (float(jnp.sum(encircling.length(p_enc))) + float(np.sum(2 * np.pi * chosen.radius)))
     row = dict(mean=float(np.mean(np.abs(left_over) / B_norm)), max=float(np.max(np.abs(left_over) / B_norm)),
                total_length_m=length, shaping_current_max=float(jnp.max(jnp.abs(p_shp["current"]))),
@@ -240,7 +248,12 @@ def summary(label, p_enc, p_shp):
                encircling_shaping_a=float(minimum_distance(g_enc, g_shp) / minor),
                shaping_shaping_a=float(minimum_distance(g_shp, g_shp, same=True) / minor),
                shaping_plasma_a=float(minimum_distance(g_shp, surface_points) / minor),
-               encircling_plasma_a=float(minimum_distance(g_enc, surface_points) / minor))
+               encircling_plasma_a=float(minimum_distance(g_enc, surface_points) / minor),
+               # coil-on-coil loads at reactor size: MN/m, MN, MN m
+               encircling_force_MN_m=float(jnp.max(jnp.linalg.norm(on_enc["force_per_length"], axis=-1)) * force_scale),
+               shaping_force_MN_m=float(jnp.max(jnp.linalg.norm(on_shp["force_per_length"], axis=-1)) * force_scale),
+               shaping_net_force_MN=float(jnp.max(jnp.linalg.norm(on_shp["force"], axis=-1)) * force_scale * reactor_length),
+               shaping_torque_MN_m=float(jnp.max(jnp.linalg.norm(on_shp["torque"], axis=-1)) * force_scale * reactor_length**2))
     print(f"{label}: " + ", ".join(f"{k} {np.round(v, 4).tolist() if not isinstance(v, float) else round(v, 4)}" for k, v in row.items()),
           flush=True)
     return row
@@ -291,7 +304,15 @@ def joint(x):
               + jnp.mean(over * over)
               + ((jnp.sum(p_enc["current"]) - total_current) / total_current) ** 2)
     peak = jnp.maximum(jnp.abs(error) / B_norm - PEAK_LIMIT, 0.0)
-    return jnp.mean(error * error) / field_scale + PEAK_WEIGHT * jnp.mean(peak * peak) + PENALTY_WEIGHT * limits
+    value = jnp.mean(error * error) / field_scale + PEAK_WEIGHT * jnp.mean(peak * peak) + PENALTY_WEIGHT * limits
+    if FORCE_WEIGHT > 0:
+        # the loads on the coils of one half period, from every coil
+        heavy = sum(jnp.mean(jnp.maximum(jnp.linalg.norm(load["force_per_length"][:n], axis=-1) * force_scale / FORCE_LIMIT - 1.0, 0.0) ** 2)
+                    for load, n in zip(coil_loads([(g_enc, encircling.expanded(p_enc)[1], encircling.expanded(p_enc)[2]),
+                                                   (g_shp, chosen.expanded(p_shp)[1], chosen.expanded(p_shp)[2])]),
+                                       (len(encircling), len(chosen))))
+        value = value + FORCE_WEIGHT * heavy
+    return value
 
 
 joint_value_and_grad = jax.jit(jax.value_and_grad(joint))

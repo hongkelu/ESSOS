@@ -142,6 +142,33 @@ def biot_savart(points, gamma, gamma_dash, currents):
     return jax.vmap(one)(points)
 
 
+def coil_loads(groups):
+    """Lorentz loads on closed filaments from the field of all the *other* filaments.
+
+    ``groups`` is a sequence of ``(gamma, gamma_dash, currents)`` with shapes (n, s, 3), (n, s, 3), (n,); the groups may
+    have different numbers of points per coil. A coil's own field is left out: it gives no net force or torque on a
+    rigid loop (only the hoop stress, which needs the conductor size). Returns one dict per group with the force per
+    length [N/m] (n, s, 3), the net force [N] (n, 3) and the torque about the coil centroid [N m] (n, 3).
+    """
+    loads = []
+    for a, (gamma, gamma_dash, currents) in enumerate(groups):
+        def field(x, own):
+            B = jnp.zeros(3)
+            for b, (g, d, c) in enumerate(groups):
+                r = x - g
+                r2 = jnp.sum(r * r, axis=-1)
+                other = jnp.ones(len(c)) if b != a else (jnp.arange(len(c)) != own).astype(r2.dtype)
+                r2 = jnp.where(other[:, None] > 0, r2, 1.0)
+                B = B + 1e-7 * jnp.einsum("n,nsk->k", c * other, jnp.cross(d, r) / r2[..., None] ** 1.5) / g.shape[1]
+            return B
+        B = jax.vmap(lambda xs, own: jax.vmap(lambda x: field(x, own))(xs))(gamma, jnp.arange(len(currents)))
+        pull = currents[:, None, None] * jnp.cross(gamma_dash, B)                   # per unit curve parameter
+        arm = gamma - jnp.mean(gamma, axis=1, keepdims=True)
+        loads.append(dict(force_per_length=pull / jnp.linalg.norm(gamma_dash, axis=-1, keepdims=True),
+                          force=jnp.mean(pull, axis=1), torque=jnp.mean(jnp.cross(arm, pull), axis=1)))
+    return loads
+
+
 def convexity_loss(curvature, curvature_limit):
     """Mean squared violation of 0 <= kappa <= curvature_limit, in units of the limit."""
     low, high = jnp.maximum(-curvature, 0.0), jnp.maximum(curvature - curvature_limit, 0.0)

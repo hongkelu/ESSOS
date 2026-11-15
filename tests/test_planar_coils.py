@@ -235,3 +235,26 @@ def test_planar_coil_set_cost_gradient_matches_finite_differences():
     step = 1e-5
     finite = (cost(g0 + step * direction) - cost(g0 - step * direction)) / (2 * step)
     assert float(jnp.vdot(gradient, direction)) == pytest.approx(float(finite), rel=1e-4)
+
+
+def test_coil_loads_of_two_coaxial_loops():
+    """Two coaxial loops with parallel currents attract with equal and opposite net forces and no torque;
+    the force matches the mutual-inductance gradient."""
+    from essos.planar_coils import coil_loads
+    radius, gap, current = 1.0, 0.5, 1e5
+    coils = PlanarCoils(jnp.array([[0., 0., 0.], [0., 0., gap]]), jnp.array([[0., 0., 1.], [0., 0., 1.]]),
+                        jnp.array([radius, radius]), current, stellsym=False, n_segments=400)
+    p = coils.initial_parameters()
+    gamma, gamma_dash, currents = coils.expanded(p)
+    load = coil_loads([(gamma, gamma_dash, currents)])[0]
+    np.testing.assert_allclose(load["force"][0], -load["force"][1], atol=1e-6 * float(jnp.abs(load["force"][0, 2])))
+    assert float(load["force"][0, 2]) > 0 > float(load["force"][1, 2])
+    np.testing.assert_allclose(load["torque"], 0.0, atol=1e-6 * float(jnp.abs(load["force"][0, 2])))
+    from scipy.special import ellipe, ellipk
+    k2 = 4 * radius**2 / (4 * radius**2 + gap**2)
+    expected = 4e-7 * np.pi * current**2 * gap / np.sqrt(4 * radius**2 + gap**2) * (
+        (2 * radius**2 + gap**2) / gap**2 * ellipe(k2) - ellipk(k2))
+    np.testing.assert_allclose(float(load["force"][0, 2]), expected, rtol=1e-4)
+    # two groups give the same loads as one
+    split = coil_loads([(gamma[:1], gamma_dash[:1], currents[:1]), (gamma[1:], gamma_dash[1:], currents[1:])])
+    np.testing.assert_allclose(split[0]["force"][0], load["force"][0], rtol=1e-10)
