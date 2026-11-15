@@ -139,7 +139,7 @@ def test_field_is_differentiable_in_every_variable():
 
 def test_dipole_field_matches_a_small_current_loop():
     from essos.planar_coils import dipole_field
-    loop = PlanarCoils([[0.1, -0.2, 0.3]], [[0.3, 0.4, np.sqrt(0.75)]], 1e-3, 2.0e4, n_segments=64)
+    loop = PlanarCoils([[0.1, -0.2, 0.3]], [[0.3, 0.4, np.sqrt(0.75)]], 1e-3, 2.0e4, n_segments=64, stellsym=False)
     p = loop.initial_parameters()
     x = jnp.array([[0.6, 0.1, 0.2], [-0.3, 0.4, 0.9]])
     moment = 2.0e4 * np.pi * 1e-6 * np.asarray(loop.normals(p))
@@ -169,10 +169,5 @@ def test_current_potential_reproduces_a_potential_and_hands_it_to_coils():
     dipoles = shaping_coils(boundary, 2, 0.15, 0.03, 0.02, 1.0)
     currents = sheet.coil_currents(coefficients, dipoles)
     assert currents.shape == (len(dipoles),) and np.all(np.isfinite(currents)) and np.abs(currents).max() > 0
-    centres = np.asarray(dipoles.centres)
-    nearest = np.argmin(np.linalg.norm(sheet.points[:, None] - centres[None], axis=-1), axis=1)
-    inside = np.linalg.norm(sheet.points - centres[nearest], axis=1) < 0.02      # cells well inside one coil's patch
-    sample = np.bincount(nearest[inside], weights=sheet.potential(coefficients)[inside], minlength=len(dipoles)) / np.maximum(
-        np.bincount(nearest[inside], minlength=len(dipoles)), 1)
-    seen = np.bincount(nearest[inside], minlength=len(dipoles)) > 0
-    assert np.corrcoef(sample[seen], currents[seen])[0, 1] > 0.9                  # current follows the local potential
+    local = sheet.potential(coefficients, dipoles.theta, dipoles.phi)                # the potential under each coil
+    assert np.corrcoef(local, currents)[0, 1] > 0.9
