@@ -105,6 +105,32 @@ for regularization in REGULARIZATIONS:
     print(f"   {regularization:9.0e}   |  {row['sheet'][0]:8.3%} {row['sheet'][1]:8.3%}  {row['potential_max_kA']:9.1f}  "
           f"{row['potential_rms_kA']:9.1f}   |   {row['coils'][0]:8.3%} {row['coils'][1]:8.3%}  {row['current_max']:6.2f} {row['current_rms']:6.2f}")
 
+""" 1b: the same sheet when the encircling coils may carry unequal currents (their sum stays fixed) """
+unit_normal = jax.jit(lambda c: jnp.sum(encircling.B(p_encircling | dict(current=c), points) * normals, axis=1))
+reference = np.asarray(p_encircling["current"])
+differences = np.linalg.svd(np.ones((1, N_ENCIRCLING)))[2][1:].T * abs(reference[0])   # current changes of zero sum
+difference_matrix = np.stack([np.asarray(unit_normal(jnp.asarray(d))) for d in differences.T], axis=1)
+results["potential_free_encircling"] = []
+if N_ENCIRCLING > 1:
+    print("\n regularization | sheet + unequal encircling currents: mean B.n  max B.n  max Phi[kA]  rms Phi[kA]  encircling currents / mean")
+    for regularization in REGULARIZATIONS:
+        weight = np.sqrt(regularization * sheet.area / sheet.area.sum())[:, None] * sheet.basis
+        n_points, n_modes = sheet_matrix.shape
+        system = np.block([[sheet_matrix / np.sqrt(n_points), difference_matrix / np.sqrt(n_points)],
+                           [weight, np.zeros((weight.shape[0], N_ENCIRCLING - 1))]])
+        rhs = np.concatenate((normal_target / np.sqrt(n_points), np.zeros(weight.shape[0])))
+        solution = np.linalg.lstsq(system, rhs, rcond=None)[0]
+        coefficients, change = solution[:n_modes], differences @ solution[n_modes:]
+        potential = sheet.potential(coefficients)
+        row = dict(regularization=float(regularization),
+                   sheet=error(sheet_matrix @ coefficients + difference_matrix @ solution[n_modes:]),
+                   potential_max_kA=float(np.abs(potential).max() / 1e3),
+                   potential_rms_kA=float(np.sqrt(np.sum(potential**2 * sheet.area) / sheet.area.sum()) / 1e3),
+                   encircling=((reference + change) / reference).tolist())
+        results["potential_free_encircling"].append(row)
+        print(f"   {regularization:9.0e}   |  {row['sheet'][0]:8.3%} {row['sheet'][1]:8.3%}  {row['potential_max_kA']:9.1f}  "
+              f"{row['potential_rms_kA']:9.1f}   {np.round(row['encircling'], 2)}")
+
 """ 3: direct bounded fit of the coil currents """
 results["bounded"] = []
 print("\n current limit | coils, bounded least squares: mean B.n  max B.n  coils at the limit  rms I")
