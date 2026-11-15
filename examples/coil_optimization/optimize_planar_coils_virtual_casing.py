@@ -49,7 +49,8 @@ FREE_SHAPING_GEOMETRY = os.environ.get("FREE_SHAPING_GEOMETRY", "0") == "1"   # 
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 600))
 
 """ Weights of step 2 (the field term is the mean squared |dB|/|B|) """
-CONVEXITY_WEIGHT, DISTANCE_WEIGHT, CURRENT_WEIGHT = 1e-2, 1e-2, 1e-2
+PENALTY_WEIGHT = float(os.environ.get("PENALTY_WEIGHT", 1.0))
+CONVEXITY_WEIGHT, DISTANCE_WEIGHT, CURRENT_WEIGHT = PENALTY_WEIGHT, PENALTY_WEIGHT, PENALTY_WEIGHT
 
 """ Field the coils must produce on the boundary: B_external = B_total - B_plasma """
 wout = read_wout(vmec_file)
