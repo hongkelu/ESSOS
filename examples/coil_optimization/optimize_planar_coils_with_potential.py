@@ -37,6 +37,10 @@ ENCIRCLING_ORDER = int(os.environ.get("ENCIRCLING_ORDER", 4))
 PLASMA_DISTANCE = float(os.environ.get("PLASMA_DISTANCE", 0.67))
 ENCIRCLING_DISTANCE = 0.67
 ENCIRCLING_SHAPING_DISTANCE = 0.34
+# In the joint refinement the encircling coils may come closer to the plasma than "behind the shaping coils" where no
+# shaping coil is in the way (their distance to every shaping coil is still enforced): a way to let them make the
+# high-field end of a mirror-type field themselves instead of a crowd of shaping coils.
+ENCIRCLING_PLASMA_DISTANCE = float(os.environ.get("ENCIRCLING_PLASMA_DISTANCE", PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE))
 SHAPING_DISTANCE = float(os.environ.get("SHAPING_DISTANCE", 0.08))
 # Shaping-coil radii, largest first; smaller sizes fill the gaps the larger ones leave:
 SHAPING_RADII = [float(v) for v in os.environ.get("SHAPING_RADII", os.environ.get("SHAPING_RADIUS", "0.2")).split(",")]
@@ -310,7 +314,7 @@ def joint(x):
     limits = (convexity_loss(encircling.signed_curvature(p_enc), CURVATURE_LIMIT / minor)
               + separation_loss(base_enc, g_enc[len(encircling):], ENCIRCLING_DISTANCE * minor)
               + separation_loss(base_enc, base_enc, ENCIRCLING_DISTANCE * minor, same=True)
-              + separation_loss(base_enc, surface_points, (PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE) * minor)
+              + separation_loss(base_enc, surface_points, ENCIRCLING_PLASMA_DISTANCE * minor)
               + separation_loss(base_enc, g_shp, ENCIRCLING_SHAPING_DISTANCE * minor)
               + separation_loss(base_shp, g_shp[len(chosen):], SHAPING_DISTANCE * minor)
               + separation_loss(base_shp, base_shp, SHAPING_DISTANCE * minor, same=True)
