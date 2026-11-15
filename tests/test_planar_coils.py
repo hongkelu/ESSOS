@@ -96,6 +96,8 @@ def test_separation_loss_and_minimum_distance():
     both = jnp.concatenate((a, b))
     assert float(minimum_distance(both, both, same=True)) == pytest.approx(0.5)
     assert float(separation_loss(both, both, 1.0, same=True)) == pytest.approx(2 * 4 * 0.25 / 8)
+    gradient = jax.grad(lambda q: separation_loss(q, q, 1.0, same=True))(both)       # zero self-distances are masked
+    assert np.all(np.isfinite(gradient)) and float(jnp.max(jnp.abs(gradient))) > 0
 
 
 def test_seeds_clear_the_boundary_and_face_it():
@@ -112,11 +114,16 @@ def test_seeds_clear_the_boundary_and_face_it():
     distance = np.linalg.norm(np.asarray(tf.gamma(p))[:, :, None, None] - points[None, None], axis=-1)
     assert distance.min() > 0.12 and len(tf) == 3
     np.testing.assert_allclose(np.asarray(tf.centre_points(p))[:, 2], 0.0, atol=1e-12)
-    dipoles = shaping_coils(boundary, 2, 4, 10, 0.12, 0.03, 2.0e4)
+    dipoles = shaping_coils(boundary, 2, 0.12, 0.03, 0.02, 2.0e4)
     q = dipoles.initial_parameters()
-    assert len(dipoles) == 40 and float(jnp.max(jnp.abs(dipoles.currents(q)))) == 0.0
+    assert len(dipoles) > 20 and float(jnp.max(jnp.abs(dipoles.currents(q)))) == 0.0
     centres = np.asarray(dipoles.centre_points(q))
     assert np.linalg.norm(centres[:, None, None] - points[None], axis=-1).min() > 0.11
+    every = dipoles.expanded(q)[0]
+    assert every.shape[0] == 4 * len(dipoles)
+    all_centres = np.asarray(every).mean(axis=1)
+    apart = np.linalg.norm(all_centres[:, None] - all_centres[None], axis=-1) + 10 * np.eye(len(all_centres))
+    assert apart.min() >= 2 * 0.03 + 0.02 - 1e-12
     q["current"] = q["current"].at[3].set(1.0)
     assert float(dipoles.currents(q)[3]) == pytest.approx(2.0e4)
 

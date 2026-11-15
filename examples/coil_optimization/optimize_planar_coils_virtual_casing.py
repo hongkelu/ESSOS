@@ -38,7 +38,6 @@ NPHI, NTHETA, VC_DIGITS = 32, 32, 4
     shaping-shaping 0.3 m, shaping radius 0.67 m, encircling curvature <= 1.5 /m """
 N_ENCIRCLING = int(os.environ.get("N_ENCIRCLING", 3))      # per half field period
 ENCIRCLING_ORDER = 4
-N_SHAPING_PHI, N_SHAPING_THETA = int(os.environ.get("N_SHAPING_PHI", 6)), int(os.environ.get("N_SHAPING_THETA", 14))
 PLASMA_DISTANCE = 0.67
 ENCIRCLING_DISTANCE = 0.67
 ENCIRCLING_SHAPING_DISTANCE = 0.34
@@ -79,8 +78,7 @@ encircling_clearance = (PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE + SHAPING_
 poloidal_current = 2 * np.pi * float(jnp.mean(jnp.linalg.norm(points[:, :2], axis=1) * B_norm)) / (4e-7 * np.pi)
 encircling_current = poloidal_current / (2 * NFP * N_ENCIRCLING)
 encircling = encircling_coils(boundary, NFP, N_ENCIRCLING, encircling_clearance, encircling_current, order=ENCIRCLING_ORDER)
-shaping = shaping_coils(boundary, NFP, N_SHAPING_PHI, N_SHAPING_THETA, shaping_offset, SHAPING_RADIUS * minor,
-                        encircling_current)
+shaping = shaping_coils(boundary, NFP, shaping_offset, SHAPING_RADIUS * minor, SHAPING_DISTANCE * minor, encircling_current)
 parameters = dict(encircling=encircling.initial_parameters(), shaping=shaping.initial_parameters())
 # The encircling current may come out with either sign: fit it once to the target.
 unit = encircling.B(parameters["encircling"], points)
@@ -139,16 +137,15 @@ def with_currents(c):
     return dict(encircling=parameters["encircling"] | dict(current=c[:n]), shaping=parameters["shaping"] | dict(current=c[n:]))
 
 
-matrix = np.asarray(jax.jacfwd(lambda c: field_error(with_currents(c)).ravel())(currents_of(parameters)))
+# The field is linear in the currents: one evaluation per unit current gives the matrix. (Forward-mode
+# differentiation of the same map returned a wrong Jacobian on a GPU; reverse mode and this agree.)
+unit_field = jax.jit(lambda c: (field(with_currents(c)) / B_norm[:, None]).ravel())
+n_currents = len(encircling) + len(shaping)
+matrix = np.stack([np.asarray(unit_field(jnp.zeros(n_currents).at[i].set(1.0))) for i in range(n_currents)], axis=1)
 target = np.asarray((B_target / B_norm[:, None]).ravel())
 limit = SHAPING_CURRENT_LIMIT * abs(sign)
 lower = np.concatenate((np.full(len(encircling), -np.inf), np.full(len(shaping), -limit)))
-c0 = np.asarray(currents_of(parameters))
-print(f"linear model check: |M c0 - t| {np.linalg.norm(matrix @ c0 - target):.6e}, direct "
-      f"{float(jnp.linalg.norm(field_error(parameters))):.6e}; matrix {matrix.shape}, column norms encircling "
-      f"{np.linalg.norm(matrix[:, :len(encircling)], axis=0)}, shaping mean {np.linalg.norm(matrix[:, len(encircling):], axis=0).mean():.3e}")
-solution = lsq_linear(matrix, target, bounds=(lower, -lower), max_iter=2000, verbose=1)
-print(f"lsq_linear status {solution.status}, iterations {solution.nit}, |M c - t| {np.linalg.norm(matrix @ solution.x - target):.6e}")
+solution = lsq_linear(matrix, target, bounds=(lower, -lower), max_iter=2000)
 parameters = with_currents(jnp.asarray(solution.x))
 print(f"step 1 took {time() - t_start:.1f} s; {int(np.sum(np.abs(solution.x[len(encircling):]) > 0.999 * limit))} "
       f"of {len(shaping)} shaping currents at the limit")

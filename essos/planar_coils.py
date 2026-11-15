@@ -148,25 +148,27 @@ def convexity_loss(curvature, curvature_limit):
     return jnp.mean(low * low + high * high) / curvature_limit**2
 
 
+def _distances(a, b, same):
+    """Point distances (na, nb, sa, sb); a coil against itself is pushed far away, with a zero gradient."""
+    squared = jnp.sum((a[:, None, :, None, :] - b[None, :, None, :, :]) ** 2, axis=-1)
+    if same:
+        squared = squared + 1e12 * jnp.eye(a.shape[0])[:, :, None, None]
+    return jnp.sqrt(squared)
+
+
 def separation_loss(a, b, minimum, *, same=False):
     """Squared shortfall of the point distances between two sets of coils below ``minimum``.
 
     ``a`` and ``b`` are (n, s, 3) point sets; ``same=True`` compares a set with itself and skips each
     coil against itself. Summed over the pairs, per point of ``a``, in units of ``minimum``.
     """
-    distance = jnp.linalg.norm(a[:, None, :, None, :] - b[None, :, None, :, :], axis=-1)   # (na, nb, sa, sb)
-    shortfall = jnp.maximum(minimum - distance, 0.0) / minimum
-    if same:
-        shortfall = shortfall * (1.0 - jnp.eye(a.shape[0]))[:, :, None, None]
+    shortfall = jnp.maximum(minimum - _distances(a, b, same), 0.0) / minimum
     return jnp.sum(shortfall * shortfall) / (a.shape[0] * a.shape[1])
 
 
 def minimum_distance(a, b, *, same=False):
     """Smallest point distance between two sets of coils (diagnostic)."""
-    distance = jnp.linalg.norm(a[:, None, :, None, :] - b[None, :, None, :, :], axis=-1)
-    if same:
-        distance = distance + 1e30 * jnp.eye(a.shape[0])[:, :, None, None]
-    return jnp.min(distance)
+    return jnp.min(_distances(a, b, same))
 
 
 class FourierBoundary:
@@ -213,17 +215,30 @@ def encircling_coils(boundary, nfp, n_coils, clearance, current, *, order=4, n_s
     return PlanarCoils(centres, normals, radius, current, order=order, nfp=nfp, stellsym=True, n_segments=n_segments)
 
 
-def shaping_coils(boundary, nfp, n_phi, n_theta, offset, radius, current_scale, *, n_segments=16):
+def shaping_coils(boundary, nfp, offset, radius, spacing, current_scale, *, n_segments=16, n_phi=24, n_theta=120):
     """Circles of one ``radius`` on the surface ``offset`` outside the boundary, facing the plasma.
 
-    A cell-centred ``n_phi`` by ``n_theta`` grid over a half field period. Currents start at zero and
+    Candidate centres are a cell-centred ``n_phi`` by ``n_theta`` grid over a half field period. They are
+    taken in order and kept when the centre is at least ``2 radius + spacing`` from every centre already
+    kept and from all symmetric images, so neighbouring circles cannot touch. Currents start at zero and
     are measured in units of ``current_scale`` ampere.
     """
     phi = (np.arange(n_phi) + 0.5) * np.pi / (nfp * n_phi)
     theta = (np.arange(n_theta) + 0.5) * 2 * np.pi / n_theta
     points, normals = boundary(theta[:, None], phi[None, :])
-    centres = (points + offset * normals).reshape(-1, 3)
-    coils = PlanarCoils(centres, normals.reshape(-1, 3), radius, current_scale, nfp=nfp, stellsym=True,
+    candidates = np.swapaxes(points + offset * normals, 0, 1).reshape(-1, 3)        # plane by plane
+    candidate_normals = np.swapaxes(normals, 0, 1).reshape(-1, 3)
+    pitch = 2 * radius + spacing
+    kept, images = [], np.zeros((0, 3))
+    for index, centre in enumerate(candidates):
+        own = np.asarray(apply_symmetries_to_gammas(jnp.asarray(centre)[None, None, :], nfp, True))[:, 0]
+        if np.min(np.linalg.norm(own[1:] - centre, axis=1)) < pitch:
+            continue
+        if images.shape[0] and np.min(np.linalg.norm(images - centre, axis=1)) < pitch:
+            continue
+        kept.append(index)
+        images = np.concatenate((images, own))
+    coils = PlanarCoils(candidates[kept], candidate_normals[kept], radius, current_scale, nfp=nfp, stellsym=True,
                         n_segments=n_segments)
     coils._currents = np.zeros(len(coils))
     return coils
