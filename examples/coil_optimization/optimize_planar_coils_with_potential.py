@@ -93,11 +93,15 @@ encircling = encircling_coils(boundary, NFP, N_ENCIRCLING, clearance, poloidal_c
                               order=ENCIRCLING_ORDER)
 parameters = encircling.initial_parameters()
 # The current the coils link is set by the toroidal field (Ampere's law): the normal field alone leaves the field
-# strength open, so the sum of the encircling currents is fixed to the value that gives the target <R B_phi>.
+# strength open. The equilibrium's R B_toroidal at the edge (rbtor) is mu0 / 2 pi times the poloidal current outside
+# the plasma, so the encircling currents must sum to that; the sum is held through the optimization.
 major = jnp.linalg.norm(points[:, :2], axis=1)
 toroidal = jnp.stack((-points[:, 1] / major, points[:, 0] / major, 0 * major), axis=1)
-linked = float(jnp.mean(major * jnp.sum(B_target * toroidal, axis=1)))
-parameters["current"] = parameters["current"] * linked / float(jnp.mean(major * jnp.sum(encircling.B(parameters, points) * toroidal, axis=1)))
+linked = float(jnp.mean(major * jnp.sum(B_target * toroidal, axis=1)))             # for the sign, and a rough check
+sign = np.sign(linked * float(jnp.mean(major * jnp.sum(encircling.B(parameters, points) * toroidal, axis=1))))
+needed = 2 * np.pi * abs(float(wout.rbtor)) / (4e-7 * np.pi) / (2 * NFP)             # per half field period
+parameters["current"] = parameters["current"] * sign * needed / abs(float(jnp.sum(parameters["current"])))
+print(f"linked current {2 * NFP * needed / 1e6:.4f} MA (R B_toroidal at the edge {float(wout.rbtor):.4f} T m; boundary average of the external field {linked:.4f})")
 total_current = float(jnp.sum(parameters["current"]))
 mean_current = abs(float(jnp.mean(encircling.currents(parameters))))
 
@@ -243,9 +247,8 @@ def summary(label, p_enc, p_shp):
     kappa = encircling.signed_curvature(p_enc)
     on_enc, on_shp = coil_loads([encircling.expanded(p_enc), chosen.expanded(p_shp)])
     length = n_copies * (float(jnp.sum(encircling.length(p_enc))) + float(np.sum(2 * np.pi * chosen.radius)))
-    made = encircling.B(p_enc, points) + chosen.B(p_shp, points)
     row = dict(mean=float(np.mean(np.abs(left_over) / B_norm)), max=float(np.max(np.abs(left_over) / B_norm)),
-               toroidal_field_ratio=float(jnp.mean(major * jnp.sum(made * toroidal, axis=1)) / linked),
+               linked_current_ratio=float(jnp.sum(jnp.abs(p_enc["current"])) / needed),
                total_length_m=length, shaping_current_max=float(jnp.max(jnp.abs(p_shp["current"]))),
                curvature_a=[float(jnp.min(kappa) * minor), float(jnp.max(kappa) * minor)],
                encircling_length_a=np.round(np.asarray(encircling.length(p_enc)) / minor, 1).tolist(),
