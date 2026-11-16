@@ -315,9 +315,14 @@ free_all = dict(encircling={k: parameters[k] for k in FREE}, shaping={k: p_chose
 x0, unravel = ravel_pytree(free_all)
 
 
+def linked(p):
+    """Encircling currents rescaled to link the full poloidal current: the field strength is not traded against the limits."""
+    return p | dict(current=p["current"] * total_current / jnp.sum(p["current"]))
+
+
 def joint(x):
     moved = unravel(x)
-    p_enc, p_shp = parameters | moved["encircling"], p_chosen | moved["shaping"]
+    p_enc, p_shp = linked(parameters | moved["encircling"]), p_chosen | moved["shaping"]
     error = (left(p_enc) - jnp.sum(chosen.B(p_shp, points) * normals, axis=1))
     g_enc, _, _ = encircling.expanded(p_enc)
     g_shp, _, _ = chosen.expanded(p_shp)
@@ -332,8 +337,7 @@ def joint(x):
               + separation_loss(base_shp, base_shp, SHAPING_DISTANCE * minor, same=True)
               + separation_loss(base_shp, surface_points, PLASMA_DISTANCE * minor)
               + jnp.mean(jnp.maximum(encircling.length(p_enc) / (LENGTH_LIMIT * minor) - 1.0, 0.0) ** 2)
-              + jnp.mean(over * over)
-              + ((jnp.sum(p_enc["current"]) - total_current) / total_current) ** 2)
+              + jnp.mean(over * over))
     peak = jnp.maximum(jnp.abs(error) / B_norm - PEAK_LIMIT, 0.0)
     value = jnp.mean(error * error) / field_scale + PEAK_WEIGHT * jnp.mean(peak * peak) + PENALTY_WEIGHT * limits
     if FORCE_WEIGHT > 0 or TORQUE_WEIGHT > 0:
@@ -354,7 +358,7 @@ t_start = time()
 result = minimize(lambda x: tuple(np.asarray(v, dtype=float) for v in joint_value_and_grad(jnp.asarray(x))), np.asarray(x0),
                   jac=True, method="L-BFGS-B", options=dict(maxiter=JOINT_ITERATIONS, maxcor=30, ftol=1e-15, gtol=1e-12))
 moved = unravel(jnp.asarray(result.x))
-parameters, p_chosen = parameters | moved["encircling"], p_chosen | moved["shaping"]
+parameters, p_chosen = linked(parameters | moved["encircling"]), p_chosen | moved["shaping"]
 print(f"joint refinement took {time() - t_start:.1f} s, {result.nit} iterations")
 results["budget"]["joint"] = summary("joint", parameters, p_chosen)
 shaping_gamma, shaping_gamma_dash, shaping_currents = chosen.expanded(p_chosen)
