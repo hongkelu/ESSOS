@@ -1034,6 +1034,48 @@ def CreateEquallySpacedCurves(n_curves:   int,
 
 
 
+def circular_coil_pairs(radius, height, current, *, shape=None, nfp: int = 1, n_segments: int = 128):
+    """Coils: for each entry, circles of ``radius`` about the Z axis at ``+height`` and ``-height`` [m].
+
+    Both circles of a pair carry ``current`` [A] in the +phi direction, which keeps stellarator symmetry
+    (poloidal-field or divertor coils).  ``shape (pairs, 2, K)`` [m] bends them with the field period: the upper
+    coil is ``R = radius + sum_k shape[:, 0, k - 1] cos(k nfp phi)``,
+    ``Z = height + sum_k shape[:, 1, k - 1] sin(k nfp phi)`` and the lower one its stellarator-symmetric image
+    (the same ``R``, ``Z`` with ``-height``).  Differentiable in all the arrays.
+    """
+    radius, height, current = (jnp.atleast_1d(jnp.asarray(v, dtype=float)) for v in (radius, height, current))
+    pairs = radius.size
+    radius, height = jnp.tile(radius, 2), jnp.concatenate((height, -height))
+    modes = 0 if shape is None else np.shape(shape)[-1]
+    # the Fourier series in the angle t = phi: [constant, sin t, cos t, sin 2t, cos 2t, ...]
+    dofs = jnp.zeros((radius.size, 3, 2 * (modes * int(nfp) + 1) + 1))
+    dofs = dofs.at[:, 0, 2].set(radius).at[:, 1, 1].set(radius).at[:, 2, 0].set(height)
+    for k in range(1, modes + 1):  # cos(m phi) (cos phi, sin phi) = the sum and difference of the m +- 1 harmonics
+        m = k * int(nfp)
+        a, b = (jnp.tile(jnp.asarray(shape, dtype=float).reshape(pairs, 2, modes)[:, i, k - 1], 2) for i in (0, 1))
+        dofs = dofs.at[:, 0, 2 * (m + 1)].add(0.5 * a).at[:, 0, 2 * (m - 1)].add(0.5 * a)
+        dofs = dofs.at[:, 1, 2 * (m + 1) - 1].add(0.5 * a).at[:, 2, 2 * m - 1].add(b)
+        if m > 1:
+            dofs = dofs.at[:, 1, 2 * (m - 1) - 1].add(-0.5 * a)
+    # a fixed current scale: one computed from traced currents could not be stored as pytree metadata
+    return Coils(Curves(dofs, n_segments=int(n_segments), nfp=1, stellsym=False), jnp.tile(current, 2),
+                 currents_scale=1.0)
+
+
+def ampere_metres(*coil_sets):
+    """Sum of ``|current| x length`` [A m] over every coil of the ``coil_sets`` (all symmetric copies).
+
+    The conductor a wound coil needs: its turns scale with its current, so its tape length scales with this
+    product.  Differentiable; lengths are those of the coils' polygons.
+    """
+    total = 0.0
+    for coils in coil_sets:
+        gamma = coils.gamma
+        lengths = jnp.sum(jnp.linalg.norm(jnp.roll(gamma, -1, axis=1) - gamma, axis=-1), axis=1)
+        total = total + jnp.sum(jnp.abs(coils.currents) * lengths)
+    return total
+
+
 @partial(jit, static_argnames=["flip"])
 def RotatedCurve(curve, phi, flip):
     rotmat_T = jnp.array(
