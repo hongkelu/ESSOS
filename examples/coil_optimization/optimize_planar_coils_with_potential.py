@@ -21,7 +21,7 @@ from vmex.core.virtual_casing import surface_field_data_from_wout
 from vmex.core.wout import read_wout
 
 from essos.planar_coils import (CurrentPotential, FourierBoundary, coil_loads, convexity_loss, encircling_coils, minimum_distance,
-                                offset_surface, separation_loss, shaping_coils)
+                                offset_surface, separation_loss, shaping_coils, winding_boundary)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -43,6 +43,12 @@ ENCIRCLING_SHAPING_DISTANCE = float(os.environ.get("ENCIRCLING_SHAPING_DISTANCE"
 # high-field end of a mirror-type field themselves instead of a crowd of shaping coils.
 ENCIRCLING_PLASMA_DISTANCE = float(os.environ.get("ENCIRCLING_PLASMA_DISTANCE", PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE))
 SHAPING_DISTANCE = float(os.environ.get("SHAPING_DISTANCE", 0.08))
+# Surface that carries the shaping coils. Unset: the plasma boundary pushed out by PLASMA_DISTANCE (follows every twist of
+# the plasma). "M,N": only the boundary harmonics m <= M, |n| / nfp <= N, pushed out until it clears the plasma by
+# PLASMA_DISTANCE everywhere: a simple shell that is easier to build ("1,0": an axisymmetric elliptical torus).
+WINDING_MODES = os.environ.get("WINDING_MODES", "")
+# What each shaping coil may change in the joint refinement; "current" alone keeps every coil on the winding surface.
+SHAPING_FREE = tuple(os.environ.get("SHAPING_FREE", "shift,tilt,current").split(","))
 # Shaping-coil radii, largest first; smaller sizes fill the gaps the larger ones leave:
 SHAPING_RADII = [float(v) for v in os.environ.get("SHAPING_RADII", os.environ.get("SHAPING_RADIUS", "0.2")).split(",")]
 SHAPING_RADIUS = max(SHAPING_RADII)
@@ -97,8 +103,13 @@ print(f"NFP {NFP}, minor radius {minor:.4f} m, aspect {float(wout.aspect):.2f}, 
 """ Encircling coils and the sheet """
 boundary = FourierBoundary(np.asarray(wout.rmnc)[-1], np.asarray(wout.zmns)[-1], np.asarray(wout.xm), np.asarray(wout.xn))
 poloidal_current = 2 * np.pi * float(np.mean(np.linalg.norm(np.asarray(points)[:, :2], axis=1) * B_norm)) / (4e-7 * np.pi)
-clearance = (PLASMA_DISTANCE + ENCIRCLING_SHAPING_DISTANCE + SHAPING_RADIUS) * minor
-encircling = encircling_coils(boundary, NFP, N_ENCIRCLING, clearance, poloidal_current / (2 * NFP * N_ENCIRCLING),
+winding, winding_offset = boundary, PLASMA_DISTANCE * minor
+if WINDING_MODES:
+    winding, winding_offset = winding_boundary(boundary, NFP, *(int(v) for v in WINDING_MODES.split(",")), PLASMA_DISTANCE * minor)
+    print(f"winding surface: boundary harmonics m <= {WINDING_MODES.split(',')[0]}, |n|/nfp <= {WINDING_MODES.split(',')[1]} "
+          f"({len(winding.xm)} of {len(boundary.xm)}), pushed out by {winding_offset / minor:.2f} minor radii")
+clearance = winding_offset + (ENCIRCLING_SHAPING_DISTANCE + SHAPING_RADIUS) * minor
+encircling = encircling_coils(winding, NFP, N_ENCIRCLING, clearance, poloidal_current / (2 * NFP * N_ENCIRCLING),
                               order=ENCIRCLING_ORDER)
 parameters = encircling.initial_parameters()
 # The current the coils link is set by the toroidal field (Ampere's law): the normal field alone leaves the field
@@ -114,7 +125,7 @@ print(f"linked current {2 * NFP * needed / 1e6:.4f} MA (R B_toroidal at the edge
 total_current = float(jnp.sum(parameters["current"]))
 mean_current = abs(float(jnp.mean(encircling.currents(parameters))))
 
-sheet = CurrentPotential(offset_surface(boundary, PLASMA_DISTANCE * minor), NFP, 10, 10)
+sheet = CurrentPotential(offset_surface(winding, winding_offset), NFP, 10, 10)
 A = sheet.normal_field_matrix(points, normals)
 n_points = A.shape[0]
 R = sheet.basis.T @ (sheet.basis * (sheet.area / sheet.area.sum())[:, None])
@@ -181,7 +192,7 @@ print(f"optimization took {time() - t_start:.1f} s, {result.nit} iterations: {re
 results["optimized"], coefficients = describe("optimized", parameters)
 
 """ Discrete shaping coils for what is left """
-shaping = shaping_coils(boundary, NFP, PLASMA_DISTANCE * minor, np.array(SHAPING_RADII) * minor, SHAPING_DISTANCE * minor, mean_current)
+shaping = shaping_coils(winding, NFP, winding_offset, np.array(SHAPING_RADII) * minor, SHAPING_DISTANCE * minor, mean_current)
 relative_size = shaping.radius / shaping.radius.max() if LIMIT_SCALES_WITH_RADIUS else np.ones(len(shaping))
 p_shaping = shaping.initial_parameters()
 normal_of_coil = jax.jit(lambda c: jnp.sum(shaping.B(p_shaping | dict(current=c), points) * normals, axis=1))
@@ -300,7 +311,7 @@ p_chosen = p_chosen | dict(current=jnp.asarray(lsq_linear(C, np.asarray(left(par
 results["budget"]["encircling_refit"] = summary(f"encircling coils refit (ridge {ridge:.0e})", parameters, p_chosen)
 
 # Everything together: encircling coils, and each shaping coil's position, tilt and current.
-free_all = dict(encircling={k: parameters[k] for k in FREE}, shaping={k: p_chosen[k] for k in ("shift", "tilt", "current")})
+free_all = dict(encircling={k: parameters[k] for k in FREE}, shaping={k: p_chosen[k] for k in SHAPING_FREE})
 x0, unravel = ravel_pytree(free_all)
 
 

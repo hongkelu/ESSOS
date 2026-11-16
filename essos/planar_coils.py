@@ -357,6 +357,37 @@ class CurrentPotential:
         return moments / (np.pi * coils.radius**2)
 
 
+def winding_boundary(boundary, nfp, mpol, ntor, distance, *, n_theta=128, n_phi=64):
+    """A simple surface to carry the shaping coils: the boundary's low harmonics only, pushed out to clear it.
+
+    Keeps the harmonics with m <= ``mpol`` and |n| / nfp <= ``ntor`` (``ntor`` = 0: an axisymmetric shell) and
+    returns that :class:`FourierBoundary` with the smallest uniform offset for which the offset surface stays
+    at least ``distance`` outside the full boundary everywhere.
+    """
+    keep = (np.abs(boundary.xm) <= mpol) & (np.abs(boundary.xn) <= ntor * nfp)
+    simple = FourierBoundary(boundary.rmnc[keep], boundary.zmns[keep], boundary.xm[keep], boundary.xn[keep])
+    theta = (np.arange(n_theta) + 0.5) * 2 * np.pi / n_theta
+    phi = (np.arange(n_phi) + 0.5) * np.pi / (nfp * n_phi)
+    plasma = boundary(theta[:, None], phi[None, :])[0]
+    centre = plasma.mean(axis=0, keepdims=True)                                       # cross-section centroids
+    points, normals = simple(theta[:, None], phi[None, :])
+
+    def clearance(offset):
+        """Distance from the full boundary to the offset surface, negative where the boundary pokes through."""
+        shell = points + offset * normals
+        gap = np.linalg.norm(plasma[:, None] - shell[None], axis=-1)                  # same plane: (plasma, shell, phi)
+        nearest = np.argmin(gap, axis=1)
+        closest = np.take_along_axis(shell, nearest[..., None], axis=0)
+        outside = np.linalg.norm(closest - centre, axis=-1) >= np.linalg.norm(plasma - centre, axis=-1)
+        return np.min(np.where(outside, 1.0, -1.0) * np.min(gap, axis=1))
+
+    low, high = 0.0, 20 * distance + 4 * np.max(np.linalg.norm(plasma - centre, axis=-1))
+    for _ in range(40):
+        middle = 0.5 * (low + high)
+        low, high = (low, middle) if clearance(middle) >= distance else (middle, high)
+    return simple, high
+
+
 def offset_surface(boundary, offset):
     """The surface ``offset`` outside a :class:`FourierBoundary`, with the boundary normals."""
     def surface(theta, phi):

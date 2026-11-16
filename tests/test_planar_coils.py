@@ -259,3 +259,21 @@ def test_coil_loads_of_two_coaxial_loops():
     # two groups give the same loads as one
     split = coil_loads([(gamma[:1], gamma_dash[:1], currents[:1]), (gamma[1:], gamma_dash[1:], currents[1:])])
     np.testing.assert_allclose(split[0]["force"][0], load["force"][0], rtol=1e-10)
+
+
+def test_winding_boundary_is_simple_and_clears_the_plasma():
+    """The winding surface keeps only the low harmonics and stays the asked distance outside the full boundary."""
+    from essos.planar_coils import FourierBoundary, offset_surface, winding_boundary
+    nfp, distance = 4, 0.1
+    xm, xn = np.array([0, 1, 1, 2]), np.array([0, 0, nfp, nfp])
+    boundary = FourierBoundary([1.0, 0.15, 0.04, 0.02], [0.0, 0.25, -0.04, 0.02], xm, xn)
+    theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)[:, None]
+    phi = np.linspace(0, 2 * np.pi / nfp, 60, endpoint=False)[None, :]
+    plasma = boundary(theta, phi)[0]
+    same, offset = winding_boundary(boundary, nfp, 2, 1, distance)                    # all harmonics kept: a plain offset
+    assert len(same.xm) == 4 and abs(offset - distance) < 2e-3
+    shell, offset = winding_boundary(boundary, nfp, 1, 0, distance)                   # axisymmetric ellipse
+    assert np.all(shell.xn == 0) and offset > distance
+    points = offset_surface(shell, offset)(theta, phi)[0]
+    gap = np.min(np.linalg.norm(plasma[:, None] - points[None], axis=-1))
+    assert distance - 5e-3 < gap < distance + 2e-2
