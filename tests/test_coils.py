@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import jax
-from essos.coils import Coils, Curves
+from essos.coils import Coils, Curves, ampere_metres, circular_coil_pairs
 from essos.surfaces import surfacerzfourier_from_boundary
 import jax.numpy as jnp
 import random
@@ -299,3 +299,29 @@ def test_zero_currents_give_finite_dofs():
     curves = CreateEquallySpacedCurves(n_curves=2, order=2, R=1.7, r=0.6, nfp=2, stellsym=True)
     coils = Coils(curves=curves, currents=[0.0, 0.0])
     assert jnp.all(jnp.isfinite(coils.dofs)) and jnp.all(jnp.isfinite(coils.currents))
+
+
+def test_circular_coil_pairs_are_mirrored_circles_and_bend_with_the_field_period():
+    pairs = circular_coil_pairs([1.2, 2.0], [0.8, 1.0], [2.0e5, -1.0e5], n_segments=64)
+    gamma = np.asarray(pairs.gamma)
+    assert gamma.shape == (4, 64, 3)
+    np.testing.assert_allclose(np.hypot(gamma[..., 0], gamma[..., 1]) - np.array([1.2, 2.0, 1.2, 2.0])[:, None], 0.0, atol=1e-13)
+    np.testing.assert_allclose(gamma[..., 2] - np.array([0.8, 1.0, -0.8, -1.0])[:, None], 0.0, atol=1e-13)
+    np.testing.assert_allclose(pairs.currents, [2.0e5, -1.0e5, 2.0e5, -1.0e5])
+    bent = np.asarray(circular_coil_pairs(1.2, 0.8, 1.0e5, shape=[[[0.05], [0.08]]], nfp=2, n_segments=64).gamma)
+    phi = np.arctan2(bent[..., 1], bent[..., 0])
+    np.testing.assert_allclose(np.hypot(bent[..., 0], bent[..., 1]), 1.2 + 0.05 * np.cos(2 * phi), atol=1e-12)
+    np.testing.assert_allclose(bent[..., 2] - np.array([0.8, -0.8])[:, None], 0.08 * np.sin(2 * phi), atol=1e-12)
+
+
+def test_ampere_metres_is_current_times_length_over_all_coils():
+    pairs = circular_coil_pairs([1.2, 2.0], [0.8, 1.0], [2.0e5, -1.0e5], n_segments=512)
+    exact = 2 * 2 * np.pi * (1.2 * 2.0e5 + 2.0 * 1.0e5)
+    np.testing.assert_allclose(ampere_metres(pairs), exact, rtol=1e-4)
+    coils = Coils(Curves(jnp.zeros((2, 3, 3)).at[:, 0, 2].set(0.5).at[:, 2, 1].set(0.5).at[:, 0, 0].set(1.5), n_segments=512,
+                         nfp=2, stellsym=True), jnp.array([1.0e5, 3.0e5]))
+    every = 4 * 2 * np.pi * 0.5 * (1.0e5 + 3.0e5)
+    np.testing.assert_allclose(ampere_metres(coils), every, rtol=1e-4)
+    np.testing.assert_allclose(ampere_metres(coils, pairs), every + exact, rtol=1e-4)
+    slope = jax.grad(lambda r: ampere_metres(circular_coil_pairs(r, 0.8, 2.0e5, n_segments=512)))(1.2)
+    np.testing.assert_allclose(slope, 2 * 2 * np.pi * 2.0e5, rtol=1e-4)
